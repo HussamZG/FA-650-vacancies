@@ -1,0 +1,71 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/cli/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// جدول المستخدمين
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("medic") // admin, commander, scout, medic
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  availabilities Availability[]
+  sessions       Session[]
+  
+  @@index([email])
+  @@index([role])
+}
+
+// جدول التفرغات الشهرية
+model Availability {
+  id        String   @id @default(cuid())
+  userId    String
+  month     Int      // الشهر (1-12)
+  year      Int      // السنة
+  
+  // فترات التفرغ لكل يوم من أيام الأسبوع (JSON string)
+  sunday    String   @default("[]")
+  monday    String   @default("[]")
+  tuesday   String   @default("[]")
+  wednesday String   @default("[]")
+  thursday  String   @default("[]")
+  friday    String   @default("[]")
+  saturday  String   @default("[]")
+  
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, month, year])
+  @@index([userId])
+  @@index([month, year])
+}
+
+// جدول الجلسات
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([token])
+  @@index([userId])
+  @@index([expiresAt])
+}
