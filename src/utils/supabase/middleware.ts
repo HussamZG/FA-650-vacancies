@@ -9,9 +9,9 @@ export const updateSession = async (request: NextRequest) => {
     },
   });
 
-  const { url, key, isConfigured } = getSupabaseEnv();
+  const { url, key } = getSupabaseEnv();
 
-  if (!isConfigured) {
+  if (!url || !key) {
     console.error(
       "Supabase middleware skipped because NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY is missing.",
     );
