@@ -23,10 +23,11 @@ function StatisticsReportComponent({ records }: StatisticsReportProps) {
     let totalShifts = 0;
     let totalDays = 0;
     const roleDistribution: Record<string, number> = {
-      sector_commander: 0,
-      team_leader: 0,
+      leader: 0,
       scout: 0,
-      medic: 0
+      medic: 0,
+      sector_lead: 0,
+      operations: 0,
     };
     const shiftDistribution: Record<string, number> = {
       morning: 0,
@@ -174,7 +175,7 @@ function StatisticsReportComponent({ records }: StatisticsReportProps) {
                   <div key={role.value} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className={role.color}>{role.icon}</span>
+                        <role.icon className={`${role.iconClass} ${role.color}`} />
                         <span className={isDarkMode ? "text-zinc-300" : "text-gray-700"}>{role.label}</span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -214,7 +215,7 @@ function StatisticsReportComponent({ records }: StatisticsReportProps) {
                   <div key={shift.value} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className={shift.color}>{shift.icon}</span>
+                        <shift.icon className={`${shift.iconClass} ${shift.color}`} />
                         <span className={isDarkMode ? "text-zinc-300" : "text-gray-700"}>{shift.label}</span>
                       </div>
                       <div className="flex items-center gap-2">

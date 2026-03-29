@@ -6,23 +6,31 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Ambulance, Mail, Lock, Eye, EyeOff, AlertCircle, 
-  ChevronLeft, Crown, Award, Star
+  ChevronLeft, UserPlus
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 export function LoginPage() {
-  const { login, isLoading: authLoading } = useAuth();
+  const { login, register } = useAuth();
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const inputClassName =
+    "h-14 rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-slate-500 shadow-none focus-visible:border-[#ff7b86]/40 focus-visible:ring-[#ff5f6d]/20";
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setSuccess("");
     setIsLoading(true);
 
     const result = await login(email, password);
@@ -34,203 +42,277 @@ export function LoginPage() {
     setIsLoading(false);
   };
 
-  const quickLogin = async (role: "admin" | "leader" | "scout" | "medic") => {
-    const credentials = {
-      admin: { email: "admin@ambulance650.com", password: "admin123" },
-      leader: { email: "leader@ambulance650.com", password: "leader123" },
-      scout: { email: "scout@ambulance650.com", password: "scout123" },
-      medic: { email: "medic@ambulance650.com", password: "medic123" },
-    };
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
 
-    setEmail(credentials[role].email);
-    setPassword(credentials[role].password);
-    
-    setIsLoading(true);
-    const result = await login(credentials[role].email, credentials[role].password);
-    if (!result.success) {
-      setError(result.error || "حدث خطأ أثناء تسجيل الدخول");
+    if (!name.trim()) {
+      setError("يرجى إدخال الاسم");
+      return;
     }
+
+    if (password.length < 6) {
+      setError("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError("تأكيد كلمة المرور غير مطابق");
+      return;
+    }
+
+    setIsLoading(true);
+
+    const result = await register(name.trim(), email, password);
+
+    if (!result.success) {
+      setError(result.error || "حدث خطأ أثناء إنشاء الحساب");
+    } else {
+      setSuccess(result.message || "تم إنشاء الحساب بنجاح");
+      setConfirmPassword("");
+      if ((result.message || "").includes("تأكيد الحساب")) {
+        setMode("login");
+      }
+    }
+
     setIsLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 p-4">
-      {/* Background Pattern */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-0 left-0 w-96 h-96 bg-red-500/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-red-500/10 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
-      </div>
+    <div className="app-stage relative min-h-screen overflow-hidden px-4 py-8 sm:px-6 sm:py-12">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_26%)]" />
+      <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:120px_120px]" />
+      <div className="absolute inset-x-0 top-0 mx-auto h-[30rem] w-[30rem] rounded-full bg-[#ff5f6d]/10 blur-[120px]" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="relative w-full max-w-md"
+        className="relative mx-auto flex w-full max-w-xl flex-col items-center"
       >
-        {/* Logo & Title */}
-        <div className="text-center mb-8">
+        <div className="mb-8 text-center">
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: "spring", delay: 0.2 }}
-            className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-red-600 to-red-700 mb-4 shadow-lg shadow-red-500/30"
+            className="mb-5 inline-flex h-[5.5rem] w-[5.5rem] items-center justify-center rounded-[1.6rem] bg-[linear-gradient(135deg,#ff6d78_0%,#ff506a_100%)] shadow-[0_20px_55px_rgba(255,95,109,0.35)]"
           >
             <Ambulance className="h-10 w-10 text-white" />
           </motion.div>
-          <h1 className="text-3xl font-bold text-white mb-2">مركز إسعاف 650</h1>
-          <p className="text-zinc-400">نظام إدارة المناوبات</p>
+          <h1 className="text-glow mb-2 text-3xl font-bold tracking-tight text-white sm:text-5xl">
+            مركز إسعاف 650
+          </h1>
+          <p className="text-lg font-semibold text-[#ffb3bb] sm:text-xl">نظام إدارة المناوبات</p>
+          <div className="accent-underline mx-auto mt-5" />
         </div>
 
-        {/* Login Card */}
-        <Card className="bg-zinc-800/50 border-zinc-700/50 backdrop-blur-xl">
-          <CardHeader className="text-center">
-            <CardTitle className="text-xl text-white">تسجيل الدخول</CardTitle>
-            <CardDescription className="text-zinc-400">
-              أدخل بياناتك للوصول إلى النظام
+        <Card className="glass-panel w-full max-w-[37rem] gap-0 overflow-hidden rounded-[2.2rem] border-white/10 bg-transparent py-0 shadow-none">
+          <CardHeader className="px-8 pb-0 pt-8 text-center sm:px-12 sm:pt-10">
+            <CardTitle className="text-3xl font-bold leading-tight text-white">
+              {mode === "login" ? "تسجيل الدخول" : "إنشاء حساب جديد"}
+            </CardTitle>
+            <CardDescription className="mt-3 text-base leading-8 text-slate-300">
+              {mode === "login" ? "أدخل بياناتك للوصول إلى النظام" : "أنشئ حسابك للبدء باستخدام النظام"}
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Error Message */}
-              {error && (
+          <CardContent className="px-8 pb-8 pt-6 sm:px-12 sm:pb-10">
+            <Tabs
+              value={mode}
+              onValueChange={(value) => {
+                setMode(value as "login" | "register");
+                setError("");
+                setSuccess("");
+              }}
+              className="space-y-5"
+            >
+              <TabsList className="grid w-full grid-cols-2 bg-white/5 p-1">
+                <TabsTrigger value="login">تسجيل الدخول</TabsTrigger>
+                <TabsTrigger value="register">إنشاء حساب</TabsTrigger>
+              </TabsList>
+
+              {(error || success) && (
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400"
+                  className={`flex items-center gap-2 rounded-2xl border p-4 text-sm ${
+                    error
+                      ? "border-red-400/30 bg-red-500/10 text-red-200"
+                      : "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                  }`}
                 >
-                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                  <span className="text-sm">{error}</span>
+                  {error ? <AlertCircle className="h-4 w-4 flex-shrink-0" /> : <UserPlus className="h-4 w-4 flex-shrink-0" />}
+                  <span>{error || success}</span>
                 </motion.div>
               )}
 
-              {/* Email Field */}
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-zinc-300">البريد الإلكتروني</Label>
-                <div className="relative">
-                  <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="example@ambulance650.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="bg-zinc-700/50 border-zinc-600 text-white placeholder:text-zinc-500 pr-10 focus:border-red-500 focus:ring-red-500/20"
-                    required
-                    dir="ltr"
-                  />
+              {mode === "login" && (
+                <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-xs leading-7 text-amber-100/90">
+                  إذا أنشأت الحساب للتو ولم تستطع الدخول، فالغالب أن Supabase يطلب تأكيد البريد الإلكتروني أولًا.
                 </div>
-              </div>
+              )}
 
-              {/* Password Field */}
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-zinc-300">كلمة المرور</Label>
-                <div className="relative">
-                  <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="bg-zinc-700/50 border-zinc-600 text-white placeholder:text-zinc-500 pr-10 pl-10 focus:border-red-500 focus:ring-red-500/20"
-                    required
-                    dir="ltr"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+              <TabsContent value="login">
+                <form onSubmit={handleLogin} className="space-y-5">
+                  <div className="space-y-2">
+                    <Label htmlFor="login-email" className="text-sm font-semibold text-slate-100">البريد الإلكتروني</Label>
+                    <div className="relative">
+                      <Mail className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                      <Input
+                        id="login-email"
+                        type="email"
+                        placeholder="example@ambulance650.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className={`${inputClassName} pr-12`}
+                        required
+                        dir="ltr"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="login-password" className="text-sm font-semibold text-slate-100">كلمة المرور</Label>
+                    <div className="relative">
+                      <Lock className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                      <Input
+                        id="login-password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className={`${inputClassName} pr-12 pl-12`}
+                        required
+                        dir="ltr"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 transition-colors hover:text-slate-200"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={isLoading}
+                    className="h-14 w-full rounded-2xl text-base font-bold"
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                    {isLoading ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>جاري تسجيل الدخول...</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span>تسجيل الدخول</span>
+                        <ChevronLeft className="h-4 w-4" />
+                      </div>
+                    )}
+                  </Button>
+                </form>
+
+                <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs leading-7 text-slate-300">
+                  بعد إنشاء الحساب قد يطلب منك Supabase تأكيد البريد الإلكتروني قبل أول تسجيل دخول، حسب إعدادات المشروع.
                 </div>
-              </div>
+              </TabsContent>
 
-              {/* Submit Button */}
-              <Button
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium py-2.5 transition-all disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>جاري تسجيل الدخول...</span>
+              <TabsContent value="register">
+                <form onSubmit={handleRegister} className="space-y-5">
+                  <div className="space-y-2">
+                    <Label htmlFor="register-name" className="text-sm font-semibold text-slate-100">الاسم الكامل</Label>
+                    <Input
+                      id="register-name"
+                      type="text"
+                      placeholder="مثال: حسام شطاير"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className={inputClassName}
+                      required
+                    />
                   </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span>تسجيل الدخول</span>
-                    <ChevronLeft className="h-4 w-4" />
+
+                  <div className="space-y-2">
+                    <Label htmlFor="register-email" className="text-sm font-semibold text-slate-100">البريد الإلكتروني</Label>
+                    <div className="relative">
+                      <Mail className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                      <Input
+                        id="register-email"
+                        type="email"
+                        placeholder="example@ambulance650.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className={`${inputClassName} pr-12`}
+                        required
+                        dir="ltr"
+                      />
+                    </div>
                   </div>
-                )}
-              </Button>
-            </form>
 
-            {/* Divider */}
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-zinc-700" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-zinc-800 px-2 text-zinc-500">أو تسجيل سريع</span>
-              </div>
-            </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="register-password" className="text-sm font-semibold text-slate-100">كلمة المرور</Label>
+                    <div className="relative">
+                      <Lock className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                      <Input
+                        id="register-password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="6 أحرف على الأقل"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className={`${inputClassName} pr-12 pl-12`}
+                        required
+                        dir="ltr"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 transition-colors hover:text-slate-200"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
 
-            {/* Quick Login Buttons */}
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => quickLogin("admin")}
-                disabled={isLoading}
-                className="bg-zinc-700/50 border-zinc-600 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center gap-2 justify-center"
-              >
-                <Crown className="h-4 w-4 text-red-400" />
-                <span>قائد قطاع</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => quickLogin("leader")}
-                disabled={isLoading}
-                className="bg-zinc-700/50 border-zinc-600 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center gap-2 justify-center"
-              >
-                <Award className="h-4 w-4 text-yellow-400" />
-                <span>قائد فريق</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => quickLogin("scout")}
-                disabled={isLoading}
-                className="bg-zinc-700/50 border-zinc-600 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center gap-2 justify-center"
-              >
-                <Star className="h-4 w-4 text-emerald-400" />
-                <span>كشاف</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => quickLogin("medic")}
-                disabled={isLoading}
-                className="bg-zinc-700/50 border-zinc-600 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center gap-2 justify-center"
-              >
-                <Ambulance className="h-4 w-4 text-cyan-400" />
-                <span>مسعف</span>
-              </Button>
-            </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="register-confirm-password" className="text-sm font-semibold text-slate-100">تأكيد كلمة المرور</Label>
+                    <Input
+                      id="register-confirm-password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="أعد كتابة كلمة المرور"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className={inputClassName}
+                      required
+                      dir="ltr"
+                    />
+                  </div>
 
-            {/* Demo Info */}
-            <div className="mt-6 p-3 rounded-lg bg-zinc-700/30 border border-zinc-600/50">
-              <p className="text-xs text-zinc-400 text-center">
-                👆 اضغط على أحد الأزرار أعلاه لتسجيل الدخول السريع كـ مستخدم تجريبي
-              </p>
-            </div>
+                  <Button
+                    type="submit"
+                    disabled={isLoading}
+                    className="h-14 w-full rounded-2xl text-base font-bold"
+                  >
+                    {isLoading ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>جاري إنشاء الحساب...</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span>إنشاء الحساب</span>
+                        <UserPlus className="h-4 w-4" />
+                      </div>
+                    )}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
 
-        {/* Footer */}
-        <p className="text-center text-zinc-500 text-sm mt-6">
+        <p className="mt-6 text-center text-sm text-slate-400/80">
           © 2024 مركز إسعاف 650 - جميع الحقوق محفوظة
         </p>
       </motion.div>

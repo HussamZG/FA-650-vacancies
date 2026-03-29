@@ -22,7 +22,7 @@ const RoleBadge = memo(function RoleBadge({ role, compact = false }: { role: Rol
   const roleInfo = ROLES.find(r => r.value === role);
   return (
     <span className={`inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg text-[10px] sm:text-xs font-medium border ${roleInfo?.bgColor} ${roleInfo?.color}`}>
-      {roleInfo?.icon}
+      {roleInfo ? <roleInfo.icon className={roleInfo.iconClass} /> : null}
       {!compact && <span>{roleInfo?.label}</span>}
     </span>
   );
@@ -94,7 +94,7 @@ const ScheduleDayCard = memo(function ScheduleDayCard({
             >
               <div className="flex items-center justify-between gap-1">
                 <div className={`flex items-center gap-0.5 ${shift.color}`}>
-                  {shift.icon}
+                  <shift.icon className={shift.iconClass} />
                   <span className="text-[9px] sm:text-xs lg:text-sm">{shift.label}</span>
                 </div>
                 <div className="flex items-center gap-0.5">
@@ -180,7 +180,7 @@ const AssignmentDialog = memo(function AssignmentDialog({
       <DialogContent className={`${isDarkMode ? "bg-zinc-900 border-zinc-800" : "bg-white border-gray-200"} max-w-4xl max-h-[90vh]`}>
         <DialogHeader>
           <DialogTitle className={`flex items-center gap-2 ${isDarkMode ? "text-white" : "text-gray-900"}`}>
-            {shiftInfo?.icon}
+            {shiftInfo ? <shiftInfo.icon className={shiftInfo.iconClass} /> : null}
             تعيين المناوبين - يوم {selectedDay} {dayName} - {shiftInfo?.label}
           </DialogTitle>
         </DialogHeader>

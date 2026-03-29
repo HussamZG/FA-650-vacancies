@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { APP_ROLE_LABELS } from '@/lib/user-access';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 
@@ -37,13 +38,6 @@ export async function GET(request: Request) {
       'evening': 'مسائي',
       'night': 'ليلي'
     };
-    const ROLES_AR: Record<string, string> = {
-      'admin': 'مدير',
-      'commander': 'قائد',
-      'scout': 'كشاف',
-      'medic': 'مسعف'
-    };
-
     if (format === 'excel') {
       // إنشاء ملف Excel
       const data: Record<string, unknown>[] = [];
@@ -51,7 +45,7 @@ export async function GET(request: Request) {
       availabilities.forEach((a) => {
         const row: Record<string, unknown> = {
           'الاسم': a.user.name,
-          'الرتبة': ROLES_AR[a.user.role] || a.user.role,
+          'الرتبة': APP_ROLE_LABELS[a.user.role as keyof typeof APP_ROLE_LABELS] || a.user.role,
           'الشهر': MONTHS[a.month - 1],
           'السنة': a.year
         };
@@ -130,7 +124,7 @@ export async function GET(request: Request) {
         x = 10;
         const rowData = [
           a.user.name,
-          ROLES_AR[a.user.role] || a.user.role
+          APP_ROLE_LABELS[a.user.role as keyof typeof APP_ROLE_LABELS] || a.user.role
         ];
 
         WEEKDAYS.forEach((day) => {

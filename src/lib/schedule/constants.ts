@@ -1,6 +1,6 @@
 // Schedule System Constants
 
-import { Sun, Sunset, Moon, Crown, Award, Star, Ambulance } from "lucide-react";
+import { Sun, Sunset, Moon, Award, Star, Ambulance, Crown, ClipboardList } from "lucide-react";
 import type { Shift, Role, ShiftInfo, RoleInfo } from "./types";
 
 export const SHIFTS: ShiftInfo[] = [
@@ -10,10 +10,11 @@ export const SHIFTS: ShiftInfo[] = [
 ];
 
 export const ROLES: RoleInfo[] = [
-  { value: "sector_commander" as Role, label: "قائد قطاع", icon: Crown, iconClass: "h-3 w-3", color: "text-red-400", bgColor: "bg-red-500/20 border-red-500/50", level: 4 },
-  { value: "team_leader" as Role, label: "قائد فريق", icon: Award, iconClass: "h-3 w-3", color: "text-yellow-400", bgColor: "bg-yellow-500/20 border-yellow-500/50", level: 3 },
+  { value: "leader" as Role, label: "قائد", icon: Award, iconClass: "h-3 w-3", color: "text-yellow-400", bgColor: "bg-yellow-500/20 border-yellow-500/50", level: 3 },
   { value: "scout" as Role, label: "كشاف", icon: Star, iconClass: "h-3 w-3", color: "text-emerald-400", bgColor: "bg-emerald-500/20 border-emerald-500/50", level: 2 },
   { value: "medic" as Role, label: "مسعف", icon: Ambulance, iconClass: "h-3 w-3", color: "text-cyan-400", bgColor: "bg-cyan-500/20 border-cyan-500/50", level: 1 },
+  { value: "sector_lead" as Role, label: "قائد قطاع", icon: Crown, iconClass: "h-3 w-3", color: "text-rose-300", bgColor: "bg-rose-500/20 border-rose-500/40", level: 4 },
+  { value: "operations" as Role, label: "عمليات", icon: ClipboardList, iconClass: "h-3 w-3", color: "text-violet-300", bgColor: "bg-violet-500/20 border-violet-500/40", level: 2 },
 ];
 
 export const WEEKDAYS = [

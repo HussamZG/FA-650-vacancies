@@ -1,99 +1,150 @@
-import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
+import { NextResponse } from "next/server";
+import { createClient } from "@/utils/supabase/server";
+import { ensureCurrentAppUserProfile } from "@/lib/server-auth";
 
-const JWT_SECRET = process.env.JWT_SECRET || 'ambulance-650-secret-key-2024';
+type Shift = "morning" | "evening" | "night";
+type AvailabilityRow = {
+  id: string;
+  userId: string;
+  month: number;
+  year: number;
+  sunday: string;
+  monday: string;
+  tuesday: string;
+  wednesday: string;
+  thursday: string;
+  friday: string;
+  saturday: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
 
-// أنواع الفترات
-type Shift = 'morning' | 'evening' | 'night';
-
-// الحصول على المستخدم الحالي
-async function getCurrentUser() {
-  const token = (await cookies()).get('auth-token')?.value;
-  if (!token) return null;
+function parseShifts(value: string | null | undefined): Shift[] {
+  if (!value) return [];
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-    const user = await db.user.findUnique({
-      where: { id: decoded.userId },
-      select: { id: true, name: true, email: true, role: true }
-    });
-    return user;
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return null;
+    return [];
   }
 }
 
-// GET - استرجاع جميع التفرغات
+function formatAvailability(row: AvailabilityRow, user?: { id: string; name: string; email: string; role: string }) {
+  return {
+    ...row,
+    sunday: parseShifts(row.sunday),
+    monday: parseShifts(row.monday),
+    tuesday: parseShifts(row.tuesday),
+    wednesday: parseShifts(row.wednesday),
+    thursday: parseShifts(row.thursday),
+    friday: parseShifts(row.friday),
+    saturday: parseShifts(row.saturday),
+    user,
+  };
+}
+
+async function getUserProfiles(userIds: string[]) {
+  if (userIds.length === 0) {
+    return new Map<string, { id: string; name: string; email: string; role: string }>();
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("User")
+    .select("id, name, email, role")
+    .in("id", userIds);
+
+  if (error) {
+    throw new Error(error.message || "تعذر تحميل بيانات المستخدمين");
+  }
+
+  return new Map(
+    (data || []).map((user) => [user.id, user])
+  );
+}
+
+async function writeAuditLog(payload: {
+  action: "create" | "update" | "delete";
+  recordId: string;
+  userId: string;
+  oldData?: string;
+  newData?: string;
+}) {
+  const supabase = await createClient();
+
+  await supabase.from("AuditLog").insert({
+    id: crypto.randomUUID(),
+    action: payload.action,
+    tableName: "availability",
+    recordId: payload.recordId,
+    oldData: payload.oldData ?? null,
+    newData: payload.newData ?? null,
+    userId: payload.userId,
+    createdAt: new Date().toISOString(),
+  });
+}
+
 export async function GET(request: Request) {
   try {
-    const user = await getCurrentUser();
+    const user = await ensureCurrentAppUserProfile();
     if (!user) {
       return NextResponse.json(
-        { success: false, error: 'يرجى تسجيل الدخول' },
+        { success: false, error: "يرجى تسجيل الدخول" },
         { status: 401 }
       );
     }
 
+    const supabase = await createClient();
     const { searchParams } = new URL(request.url);
-    const month = searchParams.get('month');
-    const year = searchParams.get('year');
-    const userId = searchParams.get('userId');
+    const month = searchParams.get("month");
+    const year = searchParams.get("year");
+    const userId = searchParams.get("userId");
 
-    const where: { month?: number; year?: number; userId?: string } = {};
-    
-    if (month) where.month = parseInt(month);
-    if (year) where.year = parseInt(year);
-    
-    // المسعف العادي يرى تفرغاته فقط
-    if (user.role !== 'admin' && user.role !== 'commander') {
-      where.userId = user.id;
-    } else if (userId) {
-      where.userId = userId;
+    let query = supabase
+      .from("Availability")
+      .select("id, userId, month, year, sunday, monday, tuesday, wednesday, thursday, friday, saturday, notes, createdAt, updatedAt")
+      .order("year", { ascending: false })
+      .order("month", { ascending: false });
+
+    if (month) query = query.eq("month", parseInt(month, 10));
+    if (year) query = query.eq("year", parseInt(year, 10));
+
+    if (userId) {
+      query = query.eq("userId", userId);
     }
 
-    const availabilities = await db.availability.findMany({
-      where: Object.keys(where).length > 0 ? where : undefined,
-      include: {
-        user: {
-          select: { id: true, name: true, email: true, role: true }
-        }
-      },
-      orderBy: [
-        { year: 'desc' },
-        { month: 'desc' }
-      ]
+    const { data, error } = await query;
+
+    if (error) {
+      throw new Error(error.message || "تعذر تحميل التفرغات");
+    }
+
+    const rows = (data || []) as AvailabilityRow[];
+    const userProfiles = await getUserProfiles([...new Set(rows.map((row) => row.userId))]);
+
+    return NextResponse.json({
+      success: true,
+      data: rows.map((row) => formatAvailability(row, userProfiles.get(row.userId))),
     });
-
-    // تحويل البيانات من JSON string إلى array
-    const formattedAvailabilities = availabilities.map((a) => ({
-      ...a,
-      sunday: JSON.parse(a.sunday),
-      monday: JSON.parse(a.monday),
-      tuesday: JSON.parse(a.tuesday),
-      wednesday: JSON.parse(a.wednesday),
-      thursday: JSON.parse(a.thursday),
-      friday: JSON.parse(a.friday),
-      saturday: JSON.parse(a.saturday)
-    }));
-
-    return NextResponse.json({ success: true, data: formattedAvailabilities });
-  } catch {
+  } catch (error) {
     return NextResponse.json(
-      { success: false, error: 'حدث خطأ في استرجاع البيانات' },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "حدث خطأ في استرجاع البيانات",
+      },
       { status: 500 }
     );
   }
 }
 
-// POST - حفظ تفرغ جديد
 export async function POST(request: Request) {
   try {
-    const user = await getCurrentUser();
+    const user = await ensureCurrentAppUserProfile();
     if (!user) {
       return NextResponse.json(
-        { success: false, error: 'يرجى تسجيل الدخول' },
+        { success: false, error: "يرجى تسجيل الدخول" },
         { status: 401 }
       );
     }
@@ -101,80 +152,96 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { month, year, sunday, monday, tuesday, wednesday, thursday, friday, saturday, notes } = body;
 
-    // التحقق من البيانات المطلوبة
     if (!month || !year) {
       return NextResponse.json(
-        { success: false, error: 'يرجى اختيار الشهر والسنة' },
+        { success: false, error: "يرجى اختيار الشهر والسنة" },
         { status: 400 }
       );
     }
 
-    // التحقق من عدم وجود تفرغ سابق
-    const existing = await db.availability.findUnique({
-      where: {
-        userId_month_year: {
-          userId: user.id,
-          month: parseInt(month),
-          year: parseInt(year)
-        }
-      }
-    });
+    const supabase = await createClient();
+    const normalizedMonth = parseInt(month, 10);
+    const normalizedYear = parseInt(year, 10);
+
+    const { data: existing, error: existingError } = await supabase
+      .from("Availability")
+      .select("id")
+      .eq("userId", user.id)
+      .eq("month", normalizedMonth)
+      .eq("year", normalizedYear)
+      .maybeSingle();
+
+    if (existingError) {
+      throw new Error(existingError.message || "تعذر التحقق من التفرغ الحالي");
+    }
 
     if (existing) {
       return NextResponse.json(
-        { success: false, error: 'لديك تفرغ مسجل بالفعل لهذا الشهر. يمكنك تعديله من لوحة التحكم' },
+        { success: false, error: "لديك تفرغ مسجل بالفعل لهذا الشهر. يمكنك تعديله من لوحة التحكم" },
         { status: 400 }
       );
     }
 
-    // إنشاء التفرغ
-    const availability = await db.availability.create({
-      data: {
-        userId: user.id,
-        month: parseInt(month),
-        year: parseInt(year),
-        sunday: JSON.stringify(sunday || []),
-        monday: JSON.stringify(monday || []),
-        tuesday: JSON.stringify(tuesday || []),
-        wednesday: JSON.stringify(wednesday || []),
-        thursday: JSON.stringify(thursday || []),
-        friday: JSON.stringify(friday || []),
-        saturday: JSON.stringify(saturday || []),
-        notes: notes || null
-      }
+    const payload = {
+      id: crypto.randomUUID(),
+      userId: user.id,
+      month: normalizedMonth,
+      year: normalizedYear,
+      sunday: JSON.stringify((sunday || []) as Shift[]),
+      monday: JSON.stringify((monday || []) as Shift[]),
+      tuesday: JSON.stringify((tuesday || []) as Shift[]),
+      wednesday: JSON.stringify((wednesday || []) as Shift[]),
+      thursday: JSON.stringify((thursday || []) as Shift[]),
+      friday: JSON.stringify((friday || []) as Shift[]),
+      saturday: JSON.stringify((saturday || []) as Shift[]),
+      notes: notes || null,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("Availability")
+      .insert(payload)
+      .select("id, userId, month, year, sunday, monday, tuesday, wednesday, thursday, friday, saturday, notes, createdAt, updatedAt")
+      .single();
+
+    if (error) {
+      throw new Error(error.message || "حدث خطأ في حفظ البيانات");
+    }
+
+    await writeAuditLog({
+      action: "create",
+      recordId: data.id,
+      userId: user.id,
+      newData: JSON.stringify(data),
     });
 
-    // تسجيل في سجل التعديلات
-    await db.auditLog.create({
-      data: {
-        action: 'create',
-        tableName: 'availability',
-        recordId: availability.id,
-        newData: JSON.stringify(availability),
-        userId: user.id
-      }
+    return NextResponse.json({
+      success: true,
+      data: formatAvailability(data as AvailabilityRow, {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      }),
+      message: "تم حفظ التفرغات بنجاح",
     });
-
-    return NextResponse.json({ 
-      success: true, 
-      data: availability,
-      message: 'تم حفظ التفرغات بنجاح' 
-    });
-  } catch {
+  } catch (error) {
     return NextResponse.json(
-      { success: false, error: 'حدث خطأ في حفظ البيانات' },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "حدث خطأ في حفظ البيانات",
+      },
       { status: 500 }
     );
   }
 }
 
-// PUT - تعديل تفرغ
 export async function PUT(request: Request) {
   try {
-    const user = await getCurrentUser();
+    const user = await ensureCurrentAppUserProfile();
     if (!user) {
       return NextResponse.json(
-        { success: false, error: 'يرجى تسجيل الدخول' },
+        { success: false, error: "يرجى تسجيل الدخول" },
         { status: 401 }
       );
     }
@@ -184,134 +251,140 @@ export async function PUT(request: Request) {
 
     if (!id) {
       return NextResponse.json(
-        { success: false, error: 'معرف التفرغ مطلوب' },
+        { success: false, error: "معرف التفرغ مطلوب" },
         { status: 400 }
       );
     }
 
-    // الحصول على التفرغ القديم
-    const oldAvailability = await db.availability.findUnique({
-      where: { id }
-    });
+    const supabase = await createClient();
+    const { data: oldAvailability, error: oldAvailabilityError } = await supabase
+      .from("Availability")
+      .select("id, userId, month, year, sunday, monday, tuesday, wednesday, thursday, friday, saturday, notes, createdAt, updatedAt")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (oldAvailabilityError) {
+      throw new Error(oldAvailabilityError.message || "تعذر تحميل التفرغ");
+    }
 
     if (!oldAvailability) {
       return NextResponse.json(
-        { success: false, error: 'التفرغ غير موجود' },
+        { success: false, error: "التفرغ غير موجود" },
         { status: 404 }
       );
     }
 
-    // التحقق من الصلاحيات
-    if (user.role !== 'admin' && user.role !== 'commander' && oldAvailability.userId !== user.id) {
-      return NextResponse.json(
-        { success: false, error: 'غير مصرح لك بتعديل هذا التفرغ' },
-        { status: 403 }
-      );
+    const updatePayload = {
+      sunday: JSON.stringify((sunday || []) as Shift[]),
+      monday: JSON.stringify((monday || []) as Shift[]),
+      tuesday: JSON.stringify((tuesday || []) as Shift[]),
+      wednesday: JSON.stringify((wednesday || []) as Shift[]),
+      thursday: JSON.stringify((thursday || []) as Shift[]),
+      friday: JSON.stringify((friday || []) as Shift[]),
+      saturday: JSON.stringify((saturday || []) as Shift[]),
+      notes: notes || null,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("Availability")
+      .update(updatePayload)
+      .eq("id", id)
+      .select("id, userId, month, year, sunday, monday, tuesday, wednesday, thursday, friday, saturday, notes, createdAt, updatedAt")
+      .single();
+
+    if (error) {
+      throw new Error(error.message || "حدث خطأ في تحديث البيانات");
     }
 
-    // تحديث التفرغ
-    const availability = await db.availability.update({
-      where: { id },
-      data: {
-        sunday: JSON.stringify(sunday || []),
-        monday: JSON.stringify(monday || []),
-        tuesday: JSON.stringify(tuesday || []),
-        wednesday: JSON.stringify(wednesday || []),
-        thursday: JSON.stringify(thursday || []),
-        friday: JSON.stringify(friday || []),
-        saturday: JSON.stringify(saturday || []),
-        notes: notes || null
-      }
+    await writeAuditLog({
+      action: "update",
+      recordId: data.id,
+      userId: user.id,
+      oldData: JSON.stringify(oldAvailability),
+      newData: JSON.stringify(data),
     });
 
-    // تسجيل في سجل التعديلات
-    await db.auditLog.create({
-      data: {
-        action: 'update',
-        tableName: 'availability',
-        recordId: availability.id,
-        oldData: JSON.stringify(oldAvailability),
-        newData: JSON.stringify(availability),
-        userId: user.id
-      }
+    return NextResponse.json({
+      success: true,
+      data: formatAvailability(data as AvailabilityRow),
+      message: "تم تحديث التفرغات بنجاح",
     });
-
-    return NextResponse.json({ 
-      success: true, 
-      data: availability,
-      message: 'تم تحديث التفرغات بنجاح' 
-    });
-  } catch {
+  } catch (error) {
     return NextResponse.json(
-      { success: false, error: 'حدث خطأ في تحديث البيانات' },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "حدث خطأ في تحديث البيانات",
+      },
       { status: 500 }
     );
   }
 }
 
-// DELETE - حذف تفرغ
 export async function DELETE(request: Request) {
   try {
-    const user = await getCurrentUser();
+    const user = await ensureCurrentAppUserProfile();
     if (!user) {
       return NextResponse.json(
-        { success: false, error: 'يرجى تسجيل الدخول' },
+        { success: false, error: "يرجى تسجيل الدخول" },
         { status: 401 }
       );
     }
 
+    const supabase = await createClient();
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const id = searchParams.get("id");
 
     if (!id) {
       return NextResponse.json(
-        { success: false, error: 'معرف التفرغ مطلوب' },
+        { success: false, error: "معرف التفرغ مطلوب" },
         { status: 400 }
       );
     }
 
-    // الحصول على التفرغ
-    const availability = await db.availability.findUnique({
-      where: { id }
-    });
+    const { data: availability, error: availabilityError } = await supabase
+      .from("Availability")
+      .select("id, userId, month, year, sunday, monday, tuesday, wednesday, thursday, friday, saturday, notes, createdAt, updatedAt")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (availabilityError) {
+      throw new Error(availabilityError.message || "تعذر تحميل التفرغ");
+    }
 
     if (!availability) {
       return NextResponse.json(
-        { success: false, error: 'التفرغ غير موجود' },
+        { success: false, error: "التفرغ غير موجود" },
         { status: 404 }
       );
     }
 
-    // التحقق من الصلاحيات
-    if (user.role !== 'admin' && user.role !== 'commander' && availability.userId !== user.id) {
-      return NextResponse.json(
-        { success: false, error: 'غير مصرح لك بحذف هذا التفرغ' },
-        { status: 403 }
-      );
+    const { error } = await supabase
+      .from("Availability")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      throw new Error(error.message || "حدث خطأ في حذف البيانات");
     }
 
-    // تسجيل في سجل التعديلات قبل الحذف
-    await db.auditLog.create({
-      data: {
-        action: 'delete',
-        tableName: 'availability',
-        recordId: id,
-        oldData: JSON.stringify(availability),
-        userId: user.id
-      }
+    await writeAuditLog({
+      action: "delete",
+      recordId: id,
+      userId: user.id,
+      oldData: JSON.stringify(availability),
     });
 
-    await db.availability.delete({
-      where: { id }
+    return NextResponse.json({
+      success: true,
+      message: "تم حذف التفرغ بنجاح",
     });
-
-    return NextResponse.json({ 
-      success: true, 
-      message: 'تم حذف التفرغ بنجاح' 
-    });
-  } catch {
+  } catch (error) {
     return NextResponse.json(
-      { success: false, error: 'حدث خطأ في حذف البيانات' },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "حدث خطأ في حذف البيانات",
+      },
       { status: 500 }
     );
   }

@@ -2,7 +2,7 @@
 
 import { 
   Shift, Role, UserData, AvailabilityData, ShiftStructure, 
-  DayScheduleStructure, TeamMember, AmbulanceTeam 
+  DayScheduleStructure, TeamMember, AmbulanceTeam, NotificationEvent
 } from "./types";
 import { 
   MAX_TEAM_MEMBERS, MAX_OPERATIONS, NUM_TEAMS, 
@@ -51,10 +51,11 @@ export const generateUsers = (): UserData[] => {
   let seed = 1;
   
   const roleDistribution: { role: Role; count: number }[] = [
-    { role: "sector_commander", count: 10 },
-    { role: "team_leader", count: 25 },
-    { role: "scout", count: 35 },
-    { role: "medic", count: 30 },
+    { role: "leader", count: 15 },
+    { role: "scout", count: 24 },
+    { role: "medic", count: 40 },
+    { role: "sector_lead", count: 10 },
+    { role: "operations", count: 11 },
   ];
   
   const usedNames = new Set<string>();
@@ -78,7 +79,8 @@ export const generateUsers = (): UserData[] => {
         id: id.toString(),
         name: fullName || `${role}_${id}`,
         email: `user${id}@ambulance650.com`,
-        role: role
+        role: role,
+        isAdmin: role === "leader",
       });
       id++;
     }
@@ -254,10 +256,11 @@ export const getDayPeopleCount = (daySchedule: DayScheduleStructure | undefined)
 // Get role level
 export const getRoleLevel = (role: Role): number => {
   const levels: Record<Role, number> = {
-    sector_commander: 4,
-    team_leader: 3,
+    leader: 3,
     scout: 2,
-    medic: 1
+    medic: 1,
+    sector_lead: 4,
+    operations: 2,
   };
   return levels[role] || 0;
 };

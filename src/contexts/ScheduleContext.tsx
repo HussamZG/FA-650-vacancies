@@ -86,7 +86,7 @@ const ScheduleContext = createContext<ScheduleContextType | null>(null);
 export function ScheduleProvider({ children }: { children: ReactNode }) {
   // User state
   const [user] = useState<UserData>(DEMO_USER);
-  const isAdmin = user?.role === "sector_commander" || user?.role === "team_leader";
+  const isAdmin = user?.isAdmin === true;
   
   // Theme state
   const [isDarkMode, setIsDarkMode] = useState(true);

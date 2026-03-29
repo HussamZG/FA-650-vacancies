@@ -21,7 +21,8 @@
 
 ```env
 # Supabase Database
-DATABASE_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres"
+DATABASE_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres"
+DIRECT_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres"
 
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL="https://[PROJECT-REF].supabase.co"
@@ -41,7 +42,7 @@ JWT_SECRET="your-super-secret-key-change-this-in-production"
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 ```
 
@@ -93,7 +94,8 @@ bun run prisma/seed.ts
 1. **لا تستخدم كلمة المرور الافتراضية في الإنتاج**
 2. **غيّر JWT_SECRET إلى قيمة عشوائية قوية**
 3. **فعّل Row Level Security (RLS) في Supabase**
-4. **استخدم HTTPS فقط في الإنتاج**
+4. **إذا كانت بيئتك لا تدعم IPv6 فاستخدم Session Pooler بدل الاتصال المباشر**
+5. **استخدم HTTPS فقط في الإنتاج**
 
 ---
 

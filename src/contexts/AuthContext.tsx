@@ -1,14 +1,17 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createClient } from "@/utils/supabase/client";
+import type { AppRole } from "@/lib/user-access";
 
-export type Role = "sector_commander" | "team_leader" | "scout" | "medic";
+export type Role = AppRole;
 
 export interface User {
   id: string;
   name: string;
   email: string;
   role: Role;
+  isAdmin: boolean;
   avatar?: string;
 }
 
@@ -16,112 +19,178 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  register: (
+    name: string,
+    email: string,
+    password: string,
+    role?: Role
+  ) => Promise<{ success: boolean; error?: string; message?: string }>;
+  logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
   isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users database
-const MOCK_USERS: (User & { password: string })[] = [
-  {
-    id: "1",
-    name: "أحمد الغامدي",
-    email: "admin@ambulance650.com",
-    password: "admin123",
-    role: "sector_commander",
-  },
-  {
-    id: "2",
-    name: "محمد الشمري",
-    email: "leader@ambulance650.com",
-    password: "leader123",
-    role: "team_leader",
-  },
-  {
-    id: "3",
-    name: "علي العتيبي",
-    email: "scout@ambulance650.com",
-    password: "scout123",
-    role: "scout",
-  },
-  {
-    id: "4",
-    name: "خالد القرني",
-    email: "medic@ambulance650.com",
-    password: "medic123",
-    role: "medic",
-  },
-  {
-    id: "5",
-    name: "سعد السبيعي",
-    email: "user1@ambulance650.com",
-    password: "user123",
-    role: "team_leader",
-  },
-  {
-    id: "6",
-    name: "فهد الزهراني",
-    email: "user2@ambulance650.com",
-    password: "user123",
-    role: "scout",
-  },
-  {
-    id: "7",
-    name: "عبدالله المطيري",
-    email: "user3@ambulance650.com",
-    password: "user123",
-    role: "medic",
-  },
-  {
-    id: "8",
-    name: "عبدالرحمن الدوسري",
-    email: "user4@ambulance650.com",
-    password: "user123",
-    role: "sector_commander",
-  },
-];
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    // Initialize from localStorage on first render
-    if (typeof window === "undefined") return null;
-    const savedUser = localStorage.getItem("currentUser");
-    if (savedUser) {
-      try {
-        return JSON.parse(savedUser);
-      } catch {
-        localStorage.removeItem("currentUser");
-      }
-    }
-    return null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Loading is only true during SSR, false on client
-  const isLoading = typeof window === "undefined";
+  const loadCurrentUserFromApp = useCallback(async () => {
+    try {
+      const response = await fetch("/api/auth", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success || !data.user) {
+        setUser(null);
+        return false;
+      }
+
+      setUser(data.user);
+      return true;
+    } catch {
+      setUser(null);
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    const supabase = createClient();
+    let isMounted = true;
+
+    const loadCurrentUser = async () => {
+      try {
+        await loadCurrentUserFromApp();
+      } catch {
+        if (isMounted) {
+          setUser(null);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadCurrentUser();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      loadCurrentUser();
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [loadCurrentUserFromApp]);
 
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    setIsLoading(true);
 
-    const foundUser = MOCK_USERS.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-    );
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (foundUser) {
-      const { password: _, ...userWithoutPassword } = foundUser;
-      setUser(userWithoutPassword);
-      localStorage.setItem("currentUser", JSON.stringify(userWithoutPassword));
-      return { success: true };
+      if (error) {
+        const message = error.message.toLowerCase();
+
+        if (message.includes("email not confirmed")) {
+          return { success: false, error: "تم إنشاء الحساب لكن يجب تأكيد البريد الإلكتروني أولًا قبل تسجيل الدخول." };
+        }
+
+        if (message.includes("invalid login credentials")) {
+          return { success: false, error: "بيانات الدخول غير صحيحة، أو أن الحساب لم يتم تأكيده بعد." };
+        }
+
+        return { success: false, error: error.message || "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
+      }
+
+      const loaded = await loadCurrentUserFromApp();
+      if (loaded) {
+        return { success: true };
+      }
+
+      return { success: false, error: "تم تسجيل الدخول لكن تعذر تحميل ملف المستخدم" };
+    } catch {
+      return { success: false, error: "تعذر الاتصال بالخادم" };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [loadCurrentUserFromApp]);
+
+  const register = useCallback(
+    async (
+      name: string,
+      email: string,
+      password: string,
+      role: Role = "medic"
+    ): Promise<{ success: boolean; error?: string; message?: string }> => {
+      setIsLoading(true);
+
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              name,
+              role,
+            },
+          },
+        });
+
+        if (error) {
+          if (error.message.toLowerCase().includes("already registered")) {
+            return { success: false, error: "هذا البريد الإلكتروني مسجل مسبقاً. جرّب تسجيل الدخول." };
+          }
+
+          return { success: false, error: error.message || "تعذر إنشاء الحساب" };
+        }
+
+        if (!data.session) {
+          return {
+            success: true,
+            message: "تم إنشاء الحساب. تحقق من بريدك الإلكتروني لتأكيد الحساب ثم سجّل الدخول.",
+          };
+        }
+
+        if (data.user?.id && data.user.email) {
+          await loadCurrentUserFromApp();
+        }
+
+        return { success: true, message: "تم إنشاء الحساب بنجاح" };
+      } catch {
+        return { success: false, error: "تعذر الاتصال بالخادم" };
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [loadCurrentUserFromApp]
+  );
+
+  const logout = useCallback(async () => {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch {
+      // تجاهل الخطأ محلياً لأننا سننهي الجلسة على الواجهة بكل الأحوال
     }
 
-    return { success: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
+    setUser(null);
   }, []);
 
-  const logout = useCallback(() => {
-    setUser(null);
-    localStorage.removeItem("currentUser");
-  }, []);
+  const refreshUser = useCallback(async () => {
+    await loadCurrentUserFromApp();
+  }, [loadCurrentUserFromApp]);
 
   return (
     <AuthContext.Provider
@@ -129,7 +198,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isLoading,
         login,
+        register,
         logout,
+        refreshUser,
         isAuthenticated: !!user,
       }}
     >
@@ -145,6 +216,3 @@ export function useAuth() {
   }
   return context;
 }
-
-// Export mock users for other parts of the app
-export { MOCK_USERS };

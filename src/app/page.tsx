@@ -10,10 +10,10 @@ export default function HomePage() {
   // Show loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 border-4 border-red-500/30 border-t-red-500 rounded-full animate-spin" />
-          <p className="text-zinc-400 text-sm">جاري التحميل...</p>
+      <div className="app-stage relative flex min-h-screen items-center justify-center overflow-hidden px-4">
+        <div className="glass-panel flex flex-col items-center gap-4 rounded-[2rem] px-10 py-9">
+          <div className="h-16 w-16 animate-spin rounded-full border-4 border-white/10 border-t-[#ff5f6d]" />
+          <p className="text-sm text-slate-300">جاري التحميل...</p>
         </div>
       </div>
     );

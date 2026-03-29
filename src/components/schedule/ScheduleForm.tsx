@@ -61,7 +61,7 @@ const DayCard = memo(function DayCard({ day, dayShifts, onToggleShift, onSelectA
                     : "border-gray-200 bg-gray-50 text-gray-500"
               }`}
             >
-              <div className="h-5 w-5 lg:h-6 lg:w-6">{shift.icon}</div>
+              <shift.icon className={`h-5 w-5 lg:h-6 lg:w-6 ${shift.color}`} />
               <span className="text-sm lg:text-base font-medium">{shift.label}</span>
             </button>
           );

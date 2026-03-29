@@ -1,15 +1,17 @@
 // Schedule System Types
 
 import type { LucideIcon } from "lucide-react";
+import type { AppRole } from "@/lib/user-access";
 
 export type Shift = "morning" | "evening" | "night";
-export type Role = "sector_commander" | "team_leader" | "scout" | "medic";
+export type Role = AppRole;
 
 export interface UserData {
   id: string;
   name: string;
   email: string;
   role: Role;
+  isAdmin?: boolean;
 }
 
 export interface AvailabilityData {

@@ -6,8 +6,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // جدول المستخدمين
@@ -16,16 +17,36 @@ model User {
   name      String
   email     String   @unique
   password  String
-  role      String   @default("medic") // admin, commander, scout, medic
+  role      String   @default("medic") // leader, scout, medic, sector_lead, operations
   isActive  Boolean  @default(true)
+  isAdmin   Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
   availabilities Availability[]
+  schedules      Schedule[]
   sessions       Session[]
+  auditLogs      AuditLog[]
   
   @@index([email])
   @@index([role])
+}
+
+// جدول الجداول الشهرية
+model Schedule {
+  id        String   @id @default(cuid())
+  month     Int
+  year      Int
+  data      String   @default("{}")
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  updatedByUser User? @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@unique([month, year])
+  @@index([month, year])
+  @@index([updatedBy])
 }
 
 // جدول التفرغات الشهرية
@@ -68,4 +89,21 @@ model Session {
   @@index([token])
   @@index([userId])
   @@index([expiresAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  tableName String
+  recordId  String
+  oldData   String?
+  newData   String?
+  userId    String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tableName])
+  @@index([createdAt])
 }

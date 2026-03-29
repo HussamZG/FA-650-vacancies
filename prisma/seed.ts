@@ -4,32 +4,38 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-  // إنشاء المستخدم الافتراضي للأدمن
-  const adminPassword = await bcrypt.hash('admin123', 10);
+  // إنشاء المستخدم الافتراضي للقائد
+  const leaderPassword = await bcrypt.hash('leader123', 10);
   
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@ambulance650.com' },
+  const leader = await prisma.user.upsert({
+    where: { email: 'leader@ambulance650.com' },
     update: {},
     create: {
-      name: 'مدير النظام',
-      email: 'admin@ambulance650.com',
-      password: adminPassword,
-      role: 'admin',
-      isActive: true
+      name: 'قائد الفريق',
+      email: 'leader@ambulance650.com',
+      password: leaderPassword,
+      role: 'leader',
+      isActive: true,
+      isAdmin: true
     }
   });
 
   console.log('✅ تم إنشاء المستخدم الافتراضي:');
-  console.log('📧 البريد: admin@ambulance650.com');
-  console.log('🔑 كلمة المرور: admin123');
-  console.log('👤 الدور: مدير النظام');
+  console.log('📧 البريد: leader@ambulance650.com');
+  console.log('🔑 كلمة المرور: leader123');
+  console.log('👤 الدور: قائد');
 
   // إنشاء بعض المستخدمين التجريبيين
   const demoUsers = [
-    { name: 'أحمد محمد', email: 'ahmed@ambulance650.com', role: 'medic' },
-    { name: 'محمد علي', email: 'mohammed@ambulance650.com', role: 'medic' },
-    { name: 'خالد حسن', email: 'khaled@ambulance650.com', role: 'commander' },
-    { name: 'سعيد عمر', email: 'saeed@ambulance650.com', role: 'scout' },
+    { name: 'أحمد محمد', email: 'ahmed@ambulance650.com', role: 'medic', isAdmin: false },
+    { name: 'محمد علي', email: 'mohammed@ambulance650.com', role: 'medic', isAdmin: false },
+    { name: 'خالد حسن', email: 'khaled@ambulance650.com', role: 'leader', isAdmin: true },
+    { name: 'سعد السبيعي', email: 'leader2@ambulance650.com', role: 'leader', isAdmin: false },
+    { name: 'سعيد عمر', email: 'saeed@ambulance650.com', role: 'scout', isAdmin: false },
+    { name: 'علي العتيبي', email: 'scout@ambulance650.com', role: 'scout', isAdmin: false },
+    { name: 'خالد القرني', email: 'medic@ambulance650.com', role: 'medic', isAdmin: false },
+    { name: 'مروان صالح', email: 'sector@ambulance650.com', role: 'sector_lead', isAdmin: false },
+    { name: 'رامي خضر', email: 'operations@ambulance650.com', role: 'operations', isAdmin: false },
   ];
 
   for (const userData of demoUsers) {
@@ -42,7 +48,8 @@ async function main() {
         email: userData.email,
         password,
         role: userData.role,
-        isActive: true
+        isActive: true,
+        isAdmin: userData.isAdmin,
       }
     });
   }

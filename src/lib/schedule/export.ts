@@ -109,10 +109,11 @@ export function generatePrintHtml(
         .team-title { font-weight: bold; color: #0891b2; margin-bottom: 5px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; }
         .member { padding: 3px 0; font-size: 13px; }
         .role-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; margin-left: 5px; }
-        .role-commander { background: #fecaca; color: #dc2626; }
         .role-leader { background: #fef08a; color: #a16207; }
         .role-scout { background: #bbf7d0; color: #166534; }
         .role-medic { background: #cffafe; color: #0e7490; }
+        .role-sector-lead { background: #ffe4e6; color: #be123c; }
+        .role-operations { background: #ede9fe; color: #6d28d9; }
         .operations-box { min-width: 150px; }
         .sector-box { min-width: 120px; }
         .footer { margin-top: 30px; text-align: center; color: #6b7280; font-size: 12px; border-top: 1px solid #e5e7eb; padding-top: 15px; }
@@ -238,20 +239,22 @@ function generateSectorHtml(shiftStructure: DayScheduleStructure['morning']): st
   if (!shiftStructure.sector) return '';
   
   const roleClass = getRoleClass(shiftStructure.sector.userRole);
+  const roleLabel = ROLES.find(r => r.value === shiftStructure.sector?.userRole)?.label || "القطاع";
   
   return `
     <div class="sector-box">
       <div class="team-title" style="color: #dc2626;">القطاع</div>
-      <div class="member"><span class="role-badge ${roleClass}">قائد قطاع</span> ${shiftStructure.sector.userName}</div>
+      <div class="member"><span class="role-badge ${roleClass}">${roleLabel}</span> ${shiftStructure.sector.userName}</div>
     </div>
   `;
 }
 
 function getRoleClass(role: Role): string {
   switch (role) {
-    case 'sector_commander': return 'role-commander';
-    case 'team_leader': return 'role-leader';
+    case 'leader': return 'role-leader';
     case 'scout': return 'role-scout';
+    case 'sector_lead': return 'role-sector-lead';
+    case 'operations': return 'role-operations';
     default: return 'role-medic';
   }
 }
@@ -262,10 +265,11 @@ export function calculateStatistics(schedule: Record<number, DayScheduleStructur
   let totalShifts = 0;
   let totalDays = 0;
   const roleDistribution: Record<string, number> = {
-    sector_commander: 0,
-    team_leader: 0,
+    leader: 0,
     scout: 0,
-    medic: 0
+    medic: 0,
+    sector_lead: 0,
+    operations: 0
   };
   
   Object.values(schedule).forEach(daySchedule => {
