@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
+import { db } from "@/lib/db";
 import { requireAdminUser } from "@/lib/server-auth";
 import { normalizeAppRole } from "@/lib/user-access";
 import { createClient } from "@/utils/supabase/server";
@@ -133,6 +135,17 @@ export async function POST(request: Request) {
       );
     }
 
+    if (data && typeof data === "object" && "id" in data) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      await db.user.update({
+        where: { id: String((data as { id: string }).id) },
+        data: {
+          password: hashedPassword,
+        },
+      });
+    }
+
     return NextResponse.json({
       success: true,
       user: data,
@@ -245,6 +258,17 @@ export async function PUT(request: Request) {
         },
         { status: getSupabaseErrorStatus(error) }
       );
+    }
+
+    if (password && data && typeof data === "object" && "id" in data) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      await db.user.update({
+        where: { id: String((data as { id: string }).id) },
+        data: {
+          password: hashedPassword,
+        },
+      });
     }
 
     return NextResponse.json({

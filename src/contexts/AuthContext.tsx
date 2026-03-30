@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { createClient } from "@/utils/supabase/client";
 import type { AppRole } from "@/lib/user-access";
 
 export type Role = AppRole;
@@ -68,69 +67,53 @@ export function AuthProvider({
   }, []);
 
   useEffect(() => {
-    const supabase = createClient();
-    let isMounted = true;
-
     const loadCurrentUser = async () => {
       try {
         await loadCurrentUserFromApp();
       } catch {
-        if (isMounted) {
-          setUser(null);
-        }
+        setUser(null);
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
     };
 
     if (!initialAuthResolved) {
       void loadCurrentUser();
+    } else {
+      setIsLoading(false);
     }
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
-      void loadCurrentUser();
-    });
-
-    return () => {
-      isMounted = false;
-      subscription.unsubscribe();
-    };
   }, [initialAuthResolved, loadCurrentUserFromApp]);
 
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
 
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const response = await fetch("/api/auth", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          email,
+          password,
+        }),
       });
+      const data = await response.json();
 
-      if (error) {
-        const message = error.message.toLowerCase();
-
-        if (message.includes("email not confirmed")) {
-          return { success: false, error: "الحساب غير مفعّل بعد. أكمل التفعيل ثم أعد المحاولة." };
-        }
-
-        if (message.includes("invalid login credentials")) {
-          return { success: false, error: "بيانات الدخول غير صحيحة." };
-        }
-
-        return { success: false, error: error.message || "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
+      if (!response.ok || !data.success) {
+        return { success: false, error: data.error || "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
       }
 
-      const loaded = await loadCurrentUserFromApp();
-      if (loaded) {
+      if (data.user) {
+        setUser(data.user);
         return { success: true };
       }
 
-      return { success: false, error: "تم تسجيل الدخول لكن تعذر تحميل ملف المستخدم" };
+      const loaded = await loadCurrentUserFromApp();
+      return loaded
+        ? { success: true }
+        : { success: false, error: "تم تسجيل الدخول لكن تعذر تحميل ملف المستخدم" };
     } catch {
       return { success: false, error: "تعذر الاتصال بالخادم" };
     } finally {
@@ -148,52 +131,48 @@ export function AuthProvider({
       setIsLoading(true);
 
       try {
-        const supabase = createClient();
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              name,
-              role,
-            },
+        const response = await fetch("/api/auth", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
           },
+          credentials: "include",
+          body: JSON.stringify({
+            name,
+            email,
+            password,
+            role,
+          }),
         });
+        const data = await response.json();
 
-        if (error) {
-          if (error.message.toLowerCase().includes("already registered")) {
-            return { success: false, error: "هذا البريد الإلكتروني مسجل مسبقاً. جرّب تسجيل الدخول." };
-          }
-
-          return { success: false, error: error.message || "تعذر إنشاء الحساب" };
+        if (!response.ok || !data.success) {
+          return { success: false, error: data.error || "تعذر إنشاء الحساب" };
         }
 
-        if (!data.session) {
-          return {
-            success: true,
-            message: "تم إنشاء الحساب بنجاح. أكمل التفعيل إن طُلب منك ذلك ثم سجّل الدخول.",
-            shouldGoToLogin: true,
-          };
+        if (data.user) {
+          setUser(data.user);
         }
 
-        if (data.user?.id && data.user.email) {
-          await loadCurrentUserFromApp();
-        }
-
-        return { success: true, message: "تم إنشاء الحساب بنجاح" };
+        return {
+          success: true,
+          message: data.message || "تم إنشاء الحساب بنجاح",
+        };
       } catch {
         return { success: false, error: "تعذر الاتصال بالخادم" };
       } finally {
         setIsLoading(false);
       }
     },
-    [loadCurrentUserFromApp]
+    []
   );
 
   const logout = useCallback(async () => {
     try {
-      const supabase = createClient();
-      await supabase.auth.signOut();
+      await fetch("/api/auth", {
+        method: "DELETE",
+        credentials: "include",
+      });
     } catch {
       // تجاهل الخطأ محلياً لأننا سننهي الجلسة على الواجهة بكل الأحوال
     }

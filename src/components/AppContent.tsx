@@ -111,6 +111,10 @@ interface NotificationEvent {
   message: string;
   time: string;
   read: boolean;
+  createdAt: string;
+  source: "local" | "remote";
+  relatedRequestId?: string | null;
+  requiresAction?: boolean;
 }
 
 interface SwapLog {
@@ -188,6 +192,71 @@ interface AvailabilitySubmissionFeedback {
   status: "submitting" | "success" | "error";
   title: string;
   message: string;
+}
+
+interface ScheduledPersonOption {
+  day: number;
+  shift: Shift;
+  personId: string;
+  personName: string;
+  personRole: Role;
+  position: string;
+  teamId: number | null;
+  locationType: AssignmentLocation["type"];
+  slotKey?: TeamSlotKey;
+}
+
+interface SmartNotification {
+  id: string;
+  userId: string;
+  actorId: string | null;
+  actorName: string | null;
+  type: NotificationEvent["type"];
+  title: string;
+  message: string;
+  relatedRequestId: string | null;
+  requiresAction: boolean;
+  readAt: string | null;
+  createdAt: string;
+}
+
+interface ShiftRequestItem {
+  id: string;
+  month: number;
+  year: number;
+  type: "swap" | "join";
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  requesterId: string;
+  requesterName: string;
+  requesterRole: Role;
+  source: {
+    day: number;
+    shift: Shift;
+    location: AssignmentLocation;
+    positionLabel: string;
+    personId: string | null;
+    personName: string | null;
+    personRole: Role | null;
+  } | null;
+  target: {
+    day: number;
+    shift: Shift;
+    location: AssignmentLocation;
+    positionLabel: string;
+    personId: string | null;
+    personName: string | null;
+    personRole: Role | null;
+  };
+  note: string | null;
+  resolutionNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+  respondedAt: string | null;
+  respondedById: string | null;
+  respondedByName: string | null;
+  canApprove: boolean;
+  canReject: boolean;
+  canCancel: boolean;
 }
 
 const SHIFTS = [
@@ -577,6 +646,12 @@ export function AppContent() {
   const [showNotificationsPopup, setShowNotificationsPopup] = useState(false);
   const [showEventsPopup, setShowEventsPopup] = useState(false);
   const [events, setEvents] = useState<NotificationEvent[]>([]);
+  const [smartNotifications, setSmartNotifications] = useState<SmartNotification[]>([]);
+  const [shiftRequests, setShiftRequests] = useState<ShiftRequestItem[]>([]);
+  const [showRequestsDialog, setShowRequestsDialog] = useState(false);
+  const [isLoadingShiftRequests, setIsLoadingShiftRequests] = useState(false);
+  const [isSubmittingShiftRequest, setIsSubmittingShiftRequest] = useState(false);
+  const [shiftRequestNote, setShiftRequestNote] = useState("");
   
   // الاستبدالات
   const [swapLogs, setSwapLogs] = useState<SwapLog[]>([]);
@@ -587,23 +662,17 @@ export function AppContent() {
     personId: string;
     personName: string;
     personRole: Role;
-    position: string;
+    position: string | null;
     teamId: number | null;
+    locationType: AssignmentLocation["type"] | null;
+    slotKey?: TeamSlotKey | null;
   } | null>(null);
   const [swapSearchTerm, setSwapSearchTerm] = useState("");
   const [swapFilterDay, setSwapFilterDay] = useState<string>("all");
   const [swapFilterShift, setSwapFilterShift] = useState<string>("all");
-  const [swapMode, setSwapMode] = useState<"swap" | "replace" | "join">("swap");
+  const [swapMode, setSwapMode] = useState<"swap" | "join">("swap");
   const [showSwapConfirm, setShowSwapConfirm] = useState(false);
-  const [selectedSwapTarget, setSelectedSwapTarget] = useState<{
-    day: number;
-    shift: Shift;
-    personId: string;
-    personName: string;
-    personRole: Role;
-    position: string;
-    teamId: number | null;
-  } | null>(null);
+  const [selectedSwapTarget, setSelectedSwapTarget] = useState<ScheduledPersonOption | AssignmentTarget | null>(null);
   const [draggedAssignment, setDraggedAssignment] = useState<DraggedAssignment | null>(null);
   const [draggedAvailablePerson, setDraggedAvailablePerson] = useState<AvailabilityData | null>(null);
   const [draggedAvailableSource, setDraggedAvailableSource] = useState<DraggedPersonSource | null>(null);
@@ -649,6 +718,8 @@ export function AppContent() {
               message: `مرحبًا ${user.name}. يمكنك متابعة التفرغات والجدول والأحداث من هذه الواجهة.`,
               time: formatEventTime(),
               read: false,
+              createdAt: new Date().toISOString(),
+              source: "local" as const,
             },
           ]
     );
@@ -750,20 +821,24 @@ export function AppContent() {
     }
   }, [isAdmin, user]);
 
-  const loadSchedule = useCallback(async () => {
+  const loadSchedule = useCallback(async (options?: { silent?: boolean }) => {
     if (!user) {
       hasLoadedScheduleRef.current = false;
       skipNextScheduleSyncRef.current = true;
       setSchedule({});
-      setIsLoadingSchedule(false);
+      if (!options?.silent) {
+        setIsLoadingSchedule(false);
+      }
       return;
     }
 
     try {
       hasLoadedScheduleRef.current = false;
-      setIsLoadingSchedule(true);
+      if (!options?.silent) {
+        setIsLoadingSchedule(true);
+        setSchedule({});
+      }
       skipNextScheduleSyncRef.current = true;
-      setSchedule({});
 
       const params = new URLSearchParams({
         month: scheduleMonth.toString(),
@@ -785,13 +860,62 @@ export function AppContent() {
     } catch (error) {
       console.error(error);
       skipNextScheduleSyncRef.current = true;
-      setSchedule({});
-      toast.error(error instanceof Error ? error.message : "تعذر تحميل الجدول");
+      if (!options?.silent) {
+        setSchedule({});
+        toast.error(error instanceof Error ? error.message : "تعذر تحميل الجدول");
+      }
     } finally {
       hasLoadedScheduleRef.current = true;
-      setIsLoadingSchedule(false);
+      if (!options?.silent) {
+        setIsLoadingSchedule(false);
+      }
     }
   }, [scheduleMonth, scheduleYear, user]);
+
+  const loadShiftCollaboration = useCallback(async (options?: { silent?: boolean }) => {
+    if (!user) {
+      setShiftRequests([]);
+      setSmartNotifications([]);
+      if (!options?.silent) {
+        setIsLoadingShiftRequests(false);
+      }
+      return;
+    }
+
+    try {
+      if (!options?.silent) {
+        setIsLoadingShiftRequests(true);
+      }
+      const params = new URLSearchParams({
+        month: selectedMonth,
+        year: selectedYear,
+      });
+
+      const response = await fetch(`/api/shift-requests?${params.toString()}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "تعذر تحميل طلبات المناوبات");
+      }
+
+      setShiftRequests((data.requests || []) as ShiftRequestItem[]);
+      setSmartNotifications((data.notifications || []) as SmartNotification[]);
+    } catch (error) {
+      console.error(error);
+      if (!options?.silent) {
+        setShiftRequests([]);
+        setSmartNotifications([]);
+        toast.error(error instanceof Error ? error.message : "تعذر تحميل طلبات المناوبات");
+      }
+    } finally {
+      if (!options?.silent) {
+        setIsLoadingShiftRequests(false);
+      }
+    }
+  }, [selectedMonth, selectedYear, user]);
 
   const persistSchedule = useCallback(
     async (
@@ -862,6 +986,27 @@ export function AppContent() {
   useEffect(() => {
     void loadSchedule();
   }, [loadSchedule]);
+
+  useEffect(() => {
+    void loadShiftCollaboration();
+  }, [loadShiftCollaboration]);
+
+  useEffect(() => {
+    if (!user || isAdmin) {
+      return;
+    }
+
+    const intervalId = globalThis.setInterval(() => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      void loadShiftCollaboration({ silent: true });
+      void loadSchedule({ silent: true });
+    }, 20000);
+
+    return () => globalThis.clearInterval(intervalId);
+  }, [isAdmin, loadSchedule, loadShiftCollaboration, user]);
 
   useEffect(() => {
     if (!user || !hasLoadedScheduleRef.current) {
@@ -1034,6 +1179,8 @@ export function AppContent() {
         message,
         time: formatEventTime(),
         read: false,
+        createdAt: new Date().toISOString(),
+        source: "local" as const,
       },
       ...prev,
     ].slice(0, 24));
@@ -2297,7 +2444,34 @@ export function AppContent() {
 
     return results;
   }, [calendarMonth, calendarSearchTerm, calendarYear, schedule]);
-  const unreadEvents = events.filter(e => !e.read).length;
+  const remoteEvents = useMemo<NotificationEvent[]>(
+    () =>
+      smartNotifications.map((notification) => ({
+        id: notification.id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        time: new Intl.DateTimeFormat("ar", {
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(new Date(notification.createdAt)),
+        read: Boolean(notification.readAt),
+        createdAt: notification.createdAt,
+        source: "remote",
+        relatedRequestId: notification.relatedRequestId,
+        requiresAction: false,
+      })),
+    [smartNotifications]
+  );
+  const displayEvents = useMemo(
+    () =>
+      [...remoteEvents, ...events].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      ),
+    [events, remoteEvents]
+  );
+  const unreadEvents = displayEvents.filter((event) => !event.read).length;
+  const adminShiftLogCount = isAdmin ? shiftRequests.length : 0;
   const scheduledDaysCount = Object.keys(schedule).length;
   const eventSummaryCards = useMemo(
     () => [
@@ -2325,12 +2499,50 @@ export function AppContent() {
     [generatedScheduleSummary.completeTeams, records.length, scheduledDaysCount, unreadEvents]
   );
 
-  const markEventAsRead = (eventId: string) => {
-    setEvents((prev) => prev.map((event) => (event.id === eventId ? { ...event, read: true } : event)));
+  const syncNotificationReadState = async (payload: { notificationId?: string; action: "read" | "read-all" }) => {
+    const response = await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        month: selectedMonth,
+        year: selectedYear,
+        notificationId: payload.notificationId,
+        action: payload.action,
+      }),
+    });
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || "تعذر تحديث الإشعارات");
+    }
+
+    setSmartNotifications((data.notifications || []) as SmartNotification[]);
+  };
+
+  const markEventAsRead = (event: NotificationEvent) => {
+    if (event.source === "remote") {
+      void syncNotificationReadState({ notificationId: event.id, action: "read" }).catch((error) => {
+        console.error(error);
+        toast.error(error instanceof Error ? error.message : "تعذر تحديث حالة الإشعار");
+      });
+      return;
+    }
+
+    setEvents((prev) => prev.map((item) => (item.id === event.id ? { ...item, read: true } : item)));
   };
 
   const markAllEventsAsRead = () => {
     setEvents((prev) => prev.map((event) => ({ ...event, read: true })));
+
+    if (smartNotifications.some((notification) => !notification.readAt)) {
+      void syncNotificationReadState({ action: "read-all" }).catch((error) => {
+        console.error(error);
+        toast.error(error instanceof Error ? error.message : "تعذر تحديث الإشعارات");
+      });
+    }
   };
 
   const getEventIcon = (type: string) => {
@@ -2362,42 +2574,40 @@ export function AppContent() {
 
   const searchSuggestions = getSearchSuggestions(calendarSearchTerm);
 
-  const openSwapDialog = (
-    day: number, 
-    shift: Shift, 
-    personId: string, 
-    personName: string, 
-    personRole: Role, 
-    position: string, 
-    teamId: number | null = null
-  ) => {
+  const openSwapDialog = (payload: {
+    day: number;
+    shift: Shift;
+    personId: string;
+    personName: string;
+    personRole: Role;
+    position: string | null;
+    teamId?: number | null;
+    locationType?: AssignmentLocation["type"] | null;
+    slotKey?: TeamSlotKey | null;
+    initialMode?: "swap" | "join";
+  }) => {
     setSwapData({
-      day,
-      shift,
-      personId,
-      personName,
-      personRole,
-      position,
-      teamId
+      day: payload.day,
+      shift: payload.shift,
+      personId: payload.personId,
+      personName: payload.personName,
+      personRole: payload.personRole,
+      position: payload.position,
+      teamId: payload.teamId ?? null,
+      locationType: payload.locationType ?? null,
+      slotKey: payload.slotKey ?? null,
     });
     setSwapSearchTerm("");
     setSwapFilterDay("all");
     setSwapFilterShift("all");
-    setSwapMode("swap");
+    setShiftRequestNote("");
+    setSwapMode(payload.initialMode ?? "swap");
     setSelectedSwapTarget(null);
     setShowSwapDialog(true);
   };
 
-  const getAllScheduledPeople = useMemo(() => {
-    const people: {
-      day: number;
-      shift: Shift;
-      personId: string;
-      personName: string;
-      personRole: Role;
-      position: string;
-      teamId: number | null;
-    }[] = [];
+  const getAllScheduledPeople = useMemo<ScheduledPersonOption[]>(() => {
+    const people: ScheduledPersonOption[] = [];
     
     const daysInMonth = getDaysInMonth(calendarMonth, calendarYear);
     
@@ -2409,15 +2619,19 @@ export function AppContent() {
         const shiftStructure = daySchedule[shiftData.value];
         
         shiftStructure.teams.forEach(team => {
-          team.members.forEach(m => {
+          getTeamSlotDefinitions(team).forEach((slot) => {
+            if (!slot.member) return;
+
             people.push({
               day,
               shift: shiftData.value,
-              personId: m.userId,
-              personName: m.userName,
-              personRole: m.userRole,
-              position: team.name,
-              teamId: team.id
+              personId: slot.member.userId,
+              personName: slot.member.userName,
+              personRole: slot.member.userRole,
+              position: getLocationLabel({ type: "team", teamId: team.id, slotKey: slot.key }),
+              teamId: team.id,
+              locationType: "team",
+              slotKey: slot.key,
             });
           });
         });
@@ -2430,7 +2644,8 @@ export function AppContent() {
             personName: m.userName,
             personRole: m.userRole,
             position: "العمليات",
-            teamId: null
+            teamId: null,
+            locationType: "operations",
           });
         });
         
@@ -2442,7 +2657,8 @@ export function AppContent() {
             personName: shiftStructure.sector.userName,
             personRole: shiftStructure.sector.userRole,
             position: "القطاع",
-            teamId: null
+            teamId: null,
+            locationType: "sector",
           });
         }
       }
@@ -2450,6 +2666,253 @@ export function AppContent() {
     
     return people;
   }, [schedule, calendarMonth, calendarYear]);
+
+  const currentUserAvailabilityRecord = useMemo(
+    () => records.find((record) => record.userId === user?.id) ?? null,
+    [records, user?.id]
+  );
+
+  const currentUserAvailabilityProfile = useMemo<AvailabilityData | null>(() => {
+    if (!user) return null;
+
+    return {
+      id: currentUserAvailabilityRecord?.id ?? `self-${user.id}`,
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+      month: scheduleMonth,
+      year: scheduleYear,
+      sunday: currentUserAvailabilityRecord?.sunday ?? [],
+      monday: currentUserAvailabilityRecord?.monday ?? [],
+      tuesday: currentUserAvailabilityRecord?.tuesday ?? [],
+      wednesday: currentUserAvailabilityRecord?.wednesday ?? [],
+      thursday: currentUserAvailabilityRecord?.thursday ?? [],
+      friday: currentUserAvailabilityRecord?.friday ?? [],
+      saturday: currentUserAvailabilityRecord?.saturday ?? [],
+      notes: currentUserAvailabilityRecord?.notes ?? null,
+      createdAt: currentUserAvailabilityRecord?.createdAt ?? new Date().toISOString(),
+    };
+  }, [currentUserAvailabilityRecord, scheduleMonth, scheduleYear, user]);
+
+  const canSwapWithCandidate = useCallback(
+    (sourcePerson: NonNullable<typeof swapData>, candidate: ScheduledPersonOption) => {
+      if (!sourcePerson.locationType || candidate.personId === sourcePerson.personId) {
+        return false;
+      }
+
+      const nextSchedule = JSON.parse(JSON.stringify(schedule)) as Record<number, DayScheduleStructure>;
+      const sourceDaySchedule = nextSchedule[sourcePerson.day];
+      const targetDaySchedule = nextSchedule[candidate.day];
+
+      if (!sourceDaySchedule || !targetDaySchedule) {
+        return false;
+      }
+
+      const sourceLocation: AssignmentLocation = {
+        type: sourcePerson.locationType,
+        teamId: sourcePerson.teamId,
+        slotKey: sourcePerson.slotKey ?? undefined,
+      };
+      const targetLocation: AssignmentLocation = {
+        type: candidate.locationType,
+        teamId: candidate.teamId,
+        slotKey: candidate.slotKey,
+      };
+
+      if (
+        sourcePerson.day === candidate.day &&
+        sourcePerson.shift === candidate.shift &&
+        sourceLocation.type === targetLocation.type &&
+        sourceLocation.teamId === targetLocation.teamId &&
+        sourceLocation.slotKey === targetLocation.slotKey
+      ) {
+        return false;
+      }
+
+      const sourceShiftStructure = nextSchedule[sourcePerson.day][sourcePerson.shift];
+      const targetShiftStructure = nextSchedule[candidate.day][candidate.shift];
+      const sourceMember: TeamMember = {
+        userId: sourcePerson.personId,
+        userName: sourcePerson.personName,
+        userRole: sourcePerson.personRole,
+      };
+      const targetMember: TeamMember = {
+        userId: candidate.personId,
+        userName: candidate.personName,
+        userRole: candidate.personRole,
+      };
+
+      removeMemberFromLocation(sourceShiftStructure, sourceLocation, sourcePerson.personId);
+      if (
+        sourcePerson.day !== candidate.day ||
+        sourcePerson.shift !== candidate.shift ||
+        sourceLocation.type !== targetLocation.type ||
+        sourceLocation.teamId !== targetLocation.teamId ||
+        sourceLocation.slotKey !== targetLocation.slotKey
+      ) {
+        removeMemberFromLocation(targetShiftStructure, targetLocation, candidate.personId);
+      }
+
+      return (
+        canPlaceMemberInLocation(targetShiftStructure, sourceMember, candidate.shift, targetLocation) &&
+        canPlaceMemberInLocation(sourceShiftStructure, targetMember, sourcePerson.shift, sourceLocation)
+      );
+    },
+    [schedule]
+  );
+
+  const getCurrentUserJoinTargets = useCallback(
+    (day: number, shift: Shift) => {
+      if (!user || !currentUserAvailabilityProfile) return [] as AssignmentTarget[];
+
+      const dayOfWeek = getDayOfWeek(day, scheduleMonth, scheduleYear);
+      const shiftsForDay = currentUserAvailabilityProfile[dayOfWeek as keyof AvailabilityData] as Shift[] | undefined;
+
+      if (!Array.isArray(shiftsForDay) || !shiftsForDay.includes(shift)) {
+        return [] as AssignmentTarget[];
+      }
+
+      if (getAssignedShiftForDayFromSchedule(schedule, day, user.id)) {
+        return [] as AssignmentTarget[];
+      }
+
+      if (isPersonAssignedToShift(day, shift, user.id)) {
+        return [] as AssignmentTarget[];
+      }
+
+      return getAvailableTargets(day, shift, currentUserAvailabilityProfile);
+    },
+    [currentUserAvailabilityProfile, schedule, scheduleMonth, scheduleYear, user]
+  );
+
+  const availableSwapTargets = useMemo(() => {
+    if (!swapData || swapMode !== "swap") return [] as ScheduledPersonOption[];
+
+    const term = swapSearchTerm.trim().toLowerCase();
+
+    return getAllScheduledPeople
+      .filter((person) => canSwapWithCandidate(swapData, person))
+      .filter((person) => {
+        if (!term) return true;
+
+        return (
+          person.personName.toLowerCase().includes(term) ||
+          person.position.toLowerCase().includes(term)
+        );
+      })
+      .slice(0, 30);
+  }, [canSwapWithCandidate, getAllScheduledPeople, swapData, swapMode, swapSearchTerm]);
+
+  const availableJoinTargets = useMemo(() => {
+    if (!swapData || swapMode !== "join") return [] as AssignmentTarget[];
+
+    const term = swapSearchTerm.trim().toLowerCase();
+    return getCurrentUserJoinTargets(swapData.day, swapData.shift)
+      .filter((target) => (!term ? true : target.label.toLowerCase().includes(term)));
+  }, [getCurrentUserJoinTargets, swapData, swapMode, swapSearchTerm]);
+
+  const submitShiftRequest = useCallback(async () => {
+    if (!swapData || !user) return;
+
+    if (swapMode === "swap" && (!selectedSwapTarget || "type" in selectedSwapTarget)) {
+      toast.error("اختر الشخص الذي تريد التبديل معه");
+      return;
+    }
+
+    if (swapMode === "join" && (!selectedSwapTarget || !("type" in selectedSwapTarget))) {
+      toast.error("اختر المكان الشاغر الذي تريد الانضمام إليه");
+      return;
+    }
+
+    try {
+      setIsSubmittingShiftRequest(true);
+      const joinTarget =
+        swapMode === "join" && selectedSwapTarget && "type" in selectedSwapTarget
+          ? selectedSwapTarget
+          : null;
+
+      const body =
+        swapMode === "swap" && selectedSwapTarget && !("type" in selectedSwapTarget)
+          ? {
+              month: selectedMonth,
+              year: selectedYear,
+              type: "swap",
+              note: shiftRequestNote,
+              source: {
+                day: swapData.day,
+                shift: swapData.shift,
+                location: {
+                  type: swapData.locationType,
+                  teamId: swapData.teamId,
+                  slotKey: swapData.slotKey,
+                },
+                positionLabel: swapData.position,
+                personId: swapData.personId,
+                personName: swapData.personName,
+                personRole: swapData.personRole,
+              },
+              target: {
+                day: selectedSwapTarget.day,
+                shift: selectedSwapTarget.shift,
+                location: {
+                  type: selectedSwapTarget.locationType,
+                  teamId: selectedSwapTarget.teamId,
+                  slotKey: selectedSwapTarget.slotKey,
+                },
+                positionLabel: selectedSwapTarget.position,
+                personId: selectedSwapTarget.personId,
+                personName: selectedSwapTarget.personName,
+                personRole: selectedSwapTarget.personRole,
+              },
+            }
+          : {
+              month: selectedMonth,
+              year: selectedYear,
+              type: "join",
+              note: shiftRequestNote,
+              target: {
+                day: swapData.day,
+                shift: swapData.shift,
+                location: {
+                  type: joinTarget?.type,
+                  teamId: joinTarget?.teamId,
+                  slotKey: joinTarget?.slotKey,
+                },
+                positionLabel: joinTarget?.label,
+                personId: null,
+                personName: null,
+                personRole: null,
+              },
+            };
+
+      const response = await fetch("/api/shift-requests", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "تعذر إرسال الطلب");
+      }
+
+      toast.success(data.message || "تم إرسال الطلب بنجاح");
+      setShowSwapConfirm(false);
+      setShowSwapDialog(false);
+      setSelectedSwapTarget(null);
+      setShiftRequestNote("");
+      await loadShiftCollaboration();
+      await loadSchedule();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "تعذر تنفيذ الطلب");
+    } finally {
+      setIsSubmittingShiftRequest(false);
+    }
+  }, [loadSchedule, loadShiftCollaboration, selectedMonth, selectedSwapTarget, selectedYear, shiftRequestNote, swapData, swapMode, user]);
 
   const handleLogout = () => {
     logout();
@@ -2753,6 +3216,188 @@ export function AppContent() {
     </div>
   );
 
+  const getRequestStatusLabel = (status: ShiftRequestItem["status"]) => {
+    switch (status) {
+      case "pending":
+        return "معلق قديم";
+      case "approved":
+        return "منفذ";
+      case "rejected":
+        return "مرفوض";
+      case "cancelled":
+        return "ملغى";
+      default:
+        return status;
+    }
+  };
+
+  const getRequestStatusClass = (status: ShiftRequestItem["status"]) => {
+    switch (status) {
+      case "pending":
+        return "border-amber-400/30 bg-amber-500/10 text-amber-200";
+      case "approved":
+        return "border-emerald-400/30 bg-emerald-500/10 text-emerald-200";
+      case "rejected":
+        return "border-rose-400/30 bg-rose-500/10 text-rose-200";
+      case "cancelled":
+        return "border-slate-400/30 bg-slate-500/10 text-slate-200";
+      default:
+        return "border-white/10 bg-white/5 text-slate-200";
+    }
+  };
+
+  const getShiftLabel = (shift: Shift) => SHIFTS.find((entry) => entry.value === shift)?.label ?? shift;
+
+  const getRequestHeadline = (request: ShiftRequestItem) =>
+    request.type === "swap"
+      ? `تبديل مع ${request.target.personName ?? "الطرف الآخر"}`
+      : `انضمام إلى ${request.target.positionLabel}`;
+
+  const executedSwapCount = shiftRequests.filter(
+    (request) => request.type === "swap" && request.status === "approved"
+  ).length;
+  const executedJoinCount = shiftRequests.filter(
+    (request) => request.type === "join" && request.status === "approved"
+  ).length;
+  const legacyPendingCount = shiftRequests.filter((request) => request.status === "pending").length;
+
+  const renderRequestsDialog = () => (
+    <Dialog open={showRequestsDialog} onOpenChange={setShowRequestsDialog}>
+      <DialogContent className="w-[96vw] max-w-5xl overflow-hidden border-white/10 bg-[linear-gradient(180deg,rgba(21,31,53,0.96),rgba(10,16,30,0.94))] p-0 shadow-[0_36px_90px_rgba(2,6,23,0.48)]">
+        <div className="border-b border-white/10 px-6 py-5">
+          <DialogHeader className="text-right">
+            <DialogTitle className="flex items-center gap-3 text-lg text-white lg:text-xl">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+                <ArrowRightLeft className="h-5 w-5 text-[#ff6f7c]" />
+              </div>
+              <div className="flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>مركز مراقبة المناوبات</span>
+                  <Badge className="bg-sky-600 text-white">للإدارة فقط</Badge>
+                </div>
+                <p className="mt-2 text-sm font-normal leading-7 text-slate-300">
+                  كل التبديلات والانضمامات تُطبَّق مباشرة على الجدول، ويظهر هنا سجلها الإداري الكامل للتتبّع والمراجعة.
+                </p>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+        </div>
+
+        <div className="grid gap-4 px-4 py-4 lg:grid-cols-[0.95fr_1.65fr] lg:px-6 lg:py-6">
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="glass-panel-soft rounded-[1.4rem] p-4">
+                <p className="text-xs text-slate-400">العمليات المسجلة</p>
+                <p className="mt-2 text-2xl font-bold text-sky-300">{shiftRequests.length}</p>
+              </div>
+              <div className="glass-panel-soft rounded-[1.4rem] p-4">
+                <p className="text-xs text-slate-400">تبديلات منفذة</p>
+                <p className="mt-2 text-2xl font-bold text-emerald-300">{executedSwapCount}</p>
+              </div>
+              <div className="glass-panel-soft rounded-[1.4rem] p-4">
+                <p className="text-xs text-slate-400">انضمامات مباشرة</p>
+                <p className="mt-2 text-2xl font-bold text-amber-300">{executedJoinCount}</p>
+              </div>
+            </div>
+
+            <div className="glass-panel-soft rounded-[1.6rem] p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white">آلية التنفيذ الحالية</h3>
+                  <p className="mt-1 text-xs leading-6 text-slate-400">
+                    لا يوجد انتظار لموافقات. المستخدم ينفّذ التبديل أو الانضمام مباشرة، والنظام يحدّث الجدول ويرسل الإشعارات فورًا.
+                  </p>
+                </div>
+                <Badge variant="outline">Live</Badge>
+              </div>
+              <div className="space-y-3 text-sm">
+                <div className="rounded-[1.2rem] border border-white/[0.08] bg-white/[0.03] px-4 py-3">
+                  <span className="text-slate-300">الطلبات الظاهرة هنا ليست للمستخدمين، بل سجل مراقبة خاص بالإدارة.</span>
+                </div>
+                <div className="rounded-[1.2rem] border border-white/[0.08] bg-white/[0.03] px-4 py-3">
+                  <span className="text-slate-300">الشخص الذي تم التبديل معه تصله إشعار مباشر بمناوبته الجديدة بعد التنفيذ.</span>
+                </div>
+                {legacyPendingCount > 0 && (
+                  <div className="rounded-[1.2rem] border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-amber-100">
+                    يوجد {legacyPendingCount} سجل قديم من النظام السابق ما زال حالته معلقة، لكنه لا يتطلب أي إجراء من الواجهة الحالية.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-panel-soft rounded-[1.8rem] p-4 lg:p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-white">سجل العمليات</h3>
+                <p className="mt-1 text-xs leading-6 text-slate-400">كل عملية تبديل أو انضمام تمت في هذه الفترة مع الحالة والوقت والتفاصيل.</p>
+              </div>
+              <Badge variant="outline">{shiftRequests.length}</Badge>
+            </div>
+
+            <ScrollArea className="max-h-[56vh] pr-1">
+              <div className="space-y-3">
+                {isLoadingShiftRequests ? (
+                  <div className="rounded-[1.4rem] border border-white/10 bg-white/[0.04] px-6 py-10 text-center text-slate-400">
+                    <RefreshCw className="mx-auto mb-3 h-10 w-10 animate-spin opacity-70" />
+                    <p>جارٍ تحميل سجل المناوبات...</p>
+                  </div>
+                ) : shiftRequests.length === 0 ? (
+                  <div className="rounded-[1.4rem] border border-white/10 bg-white/[0.04] px-6 py-10 text-center text-slate-400">
+                    <ArrowRightLeft className="mx-auto mb-3 h-12 w-12 opacity-50" />
+                    <p>لا توجد عمليات تبديل أو انضمام مسجلة لهذه الفترة بعد.</p>
+                  </div>
+                ) : (
+                  shiftRequests.map((request) => (
+                    <div key={request.id} className="rounded-[1.4rem] border border-white/10 bg-white/[0.04] p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-bold text-white">{getRequestHeadline(request)}</p>
+                            <Badge variant="outline" className={getRequestStatusClass(request.status)}>
+                              {getRequestStatusLabel(request.status)}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 text-xs leading-7 text-slate-300">
+                            {request.type === "swap"
+                              ? `${request.requesterName} بدّل مناوبته يوم ${request.source?.day} (${getShiftLabel(request.source?.shift || "morning")}) مع ${request.target.personName ?? "الطرف الآخر"} يوم ${request.target.day} (${getShiftLabel(request.target.shift)}).`
+                              : `${request.requesterName} انضم إلى ${request.target.positionLabel} يوم ${request.target.day} (${getShiftLabel(request.target.shift)}).`}
+                          </p>
+                          {request.note && (
+                            <p className="mt-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs leading-6 text-slate-300">
+                              ملاحظة: {request.note}
+                            </p>
+                          )}
+                          {request.resolutionNote && (
+                            <p className="mt-2 text-xs leading-6 text-slate-500">
+                              توضيح التنفيذ: {request.resolutionNote}
+                            </p>
+                          )}
+                        </div>
+                        <div className="shrink-0 text-left text-[11px] text-slate-500">
+                          <p>{new Intl.DateTimeFormat("ar", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(request.createdAt))}</p>
+                          {request.respondedAt && (
+                            <p className="mt-1">تم التنفيذ عبر {request.respondedByName ?? "النظام"}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+        </div>
+
+        <div className="border-t border-white/10 px-4 py-4">
+          <Button onClick={() => setShowRequestsDialog(false)} className="w-full">
+            إغلاق
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
   const renderNotificationsPopup = () => (
     <Dialog open={showNotificationsPopup} onOpenChange={setShowNotificationsPopup}>
       <DialogContent className="w-[95vw] max-w-2xl overflow-hidden border-white/10 bg-[linear-gradient(180deg,rgba(21,31,53,0.96),rgba(10,16,30,0.94))] p-0 shadow-[0_32px_80px_rgba(2,6,23,0.45)]">
@@ -2777,17 +3422,17 @@ export function AppContent() {
 
         <ScrollArea className="max-h-[60vh] px-4 py-4 lg:max-h-[70vh]">
           <div className="space-y-3 pb-1">
-            {events.length === 0 ? (
+            {displayEvents.length === 0 ? (
               <div className="glass-panel-soft rounded-[1.6rem] px-6 py-10 text-center text-slate-400">
                 <Bell className="mx-auto mb-3 h-12 w-12 opacity-50" />
                 <p>لا توجد إشعارات حاليًا</p>
               </div>
             ) : (
-              events.map((event) => (
+              displayEvents.map((event) => (
                 <button
                   key={event.id}
                   type="button"
-                  onClick={() => markEventAsRead(event.id)}
+                  onClick={() => markEventAsRead(event)}
                   className={`w-full rounded-[1.4rem] border p-4 text-right transition-all hover:-translate-y-0.5 ${getEventBg(event.type)} ${!event.read ? "shadow-[0_18px_42px_rgba(255,95,109,0.14)]" : ""}`}
                 >
                   <div className="flex items-start gap-3">
@@ -2881,7 +3526,7 @@ export function AppContent() {
                 </div>
                 <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-3">
                   <span className="text-slate-300">سجل التبديلات</span>
-                  <span className="font-bold text-rose-300">{swapLogs.length}</span>
+                  <span className="font-bold text-rose-300">{shiftRequests.length}</span>
                 </div>
               </div>
             </div>
@@ -2898,11 +3543,11 @@ export function AppContent() {
 
             <ScrollArea className="max-h-[52vh] pr-1">
               <div className="space-y-3">
-                {events.map((event, index) => (
+                {displayEvents.map((event, index) => (
                   <button
                     key={event.id}
                     type="button"
-                    onClick={() => markEventAsRead(event.id)}
+                    onClick={() => markEventAsRead(event)}
                     className={`relative w-full rounded-[1.4rem] border p-4 text-right transition-all hover:-translate-y-0.5 ${getEventBg(event.type)}`}
                   >
                     <div className="absolute right-0 top-4 bottom-4 w-1 rounded-full bg-white/12" />
@@ -2948,25 +3593,28 @@ export function AppContent() {
 
   const renderSwapDialog = () => {
     if (!swapData) return null;
-    
-    const daysInMonth = getDaysInMonth(calendarMonth, calendarYear);
-    
+
+    const selectedTargetName =
+      selectedSwapTarget && !("type" in selectedSwapTarget)
+        ? selectedSwapTarget.personName
+        : selectedSwapTarget && "type" in selectedSwapTarget
+          ? selectedSwapTarget.label
+          : null;
+
     return (
       <>
         <Dialog open={showSwapDialog} onOpenChange={setShowSwapDialog}>
-      <DialogContent className="w-[96vw] max-w-5xl max-h-[92vh] overflow-hidden border-white/10 bg-[linear-gradient(180deg,rgba(21,31,53,0.96),rgba(10,16,30,0.94))]">
+          <DialogContent className="w-[96vw] max-w-5xl max-h-[92vh] overflow-hidden border-white/10 bg-[linear-gradient(180deg,rgba(21,31,53,0.96),rgba(10,16,30,0.94))]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-lg text-white lg:text-xl">
                 <ArrowRightLeft className="h-5 w-5 lg:h-6 lg:w-6 text-red-500" />
-                تبديل/استبدال/انضمام: {swapData.personName}
+                إدارة المناوبة: {swapData.personName}
               </DialogTitle>
             </DialogHeader>
-            
+
             <div className="mb-4 rounded-[1.5rem] border border-white/10 bg-white/[0.05] p-3 backdrop-blur-xl lg:p-4">
-              <p className="mb-3 text-sm font-bold text-slate-200">
-                اختر نوع العملية:
-              </p>
-              <div className="grid grid-cols-3 gap-2">
+              <p className="mb-3 text-sm font-bold text-slate-200">اختر نوع العملية:</p>
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => setSwapMode("swap")}
                   className={`p-3 rounded-xl text-center transition-all ${
@@ -2978,22 +3626,8 @@ export function AppContent() {
                   }`}
                 >
                   <ArrowRightLeft className="h-5 w-5 mx-auto mb-1" />
-                  <span className="text-sm font-bold">تبديل</span>
-                  <p className="text-[10px] opacity-80 mt-1">الشخصان يتبادلان</p>
-                </button>
-                <button
-                  onClick={() => setSwapMode("replace")}
-                  className={`p-3 rounded-xl text-center transition-all ${
-                    swapMode === "replace"
-                      ? "bg-amber-600 text-white ring-2 ring-amber-400"
-                      : isDarkMode
-                        ? "border border-white/10 bg-white/[0.05] text-zinc-300 hover:bg-white/[0.08]"
-                        : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
-                  }`}
-                >
-                  <User className="h-5 w-5 mx-auto mb-1" />
-                  <span className="text-sm font-bold">استبدال</span>
-                  <p className="text-[10px] opacity-80 mt-1">يأخذ مكانه</p>
+                  <span className="text-sm font-bold">تبديل فوري</span>
+                  <p className="text-[10px] opacity-80 mt-1">يطبَّق مباشرة ويصل إشعار للطرف الآخر</p>
                 </button>
                 <button
                   onClick={() => setSwapMode("join")}
@@ -3006,93 +3640,138 @@ export function AppContent() {
                   }`}
                 >
                   <Plus className="h-5 w-5 mx-auto mb-1" />
-                  <span className="text-sm font-bold">انضمام</span>
-                  <p className="text-[10px] opacity-80 mt-1">ينضم لمكان شاغر</p>
+                  <span className="text-sm font-bold">انضمام فوري</span>
+                  <p className="text-[10px] opacity-80 mt-1">يثبَّت مباشرة إذا كانت الشروط متحققة</p>
                 </button>
               </div>
             </div>
 
-            <ScrollArea className="max-h-[50vh]">
+            <div className="mb-4 space-y-3">
+              <div className="relative">
+                <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <Input
+                  value={swapSearchTerm}
+                  onChange={(event) => setSwapSearchTerm(event.target.value)}
+                  placeholder={swapMode === "swap" ? "ابحث باسم الشخص أو موقعه..." : "ابحث باسم الخانة..."}
+                  className={`${searchInputClass} pr-10`}
+                />
+              </div>
+              <Textarea
+                value={shiftRequestNote}
+                onChange={(event) => setShiftRequestNote(event.target.value)}
+                placeholder="ملاحظة اختيارية توضح سبب الطلب أو أي تنسيق لازم..."
+                className={searchInputClass}
+              />
+            </div>
+
+            <ScrollArea className="max-h-[42vh]">
               {swapMode === "join" ? (
-                <div className="p-2">
-                  <p className={`text-sm mb-3 ${isDarkMode ? "text-slate-400" : "text-gray-500"}`}>
-                    اختر مكان شاغر للانضمام إليه:
+                <div className="space-y-3 p-2">
+                  <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-gray-500"}`}>
+                    الأماكن الشاغرة المتاحة لك داخل هذه المناوبة:
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {getAllScheduledPeople.slice(0, 20).map((person, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => {
-                          setSelectedSwapTarget(person);
-                          setShowSwapConfirm(true);
-                        }}
-                        className={`min-w-0 p-3 rounded-xl text-right transition-all ${
-                          isDarkMode
-                            ? "border border-white/10 bg-white/[0.05] hover:bg-white/[0.08]"
-                            : "bg-white hover:bg-gray-50 border border-gray-200"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <p className={`font-medium text-sm break-words ${isDarkMode ? "text-white" : "text-gray-900"}`}>
-                              {person.personName}
-                            </p>
-                            <p className={`text-xs break-words ${isDarkMode ? "text-zinc-400" : "text-gray-500"}`}>
-                              يوم {person.day} - {WEEKDAYS_AR[getDayOfWeek(person.day, calendarMonth, calendarYear)]}
-                            </p>
-                            <p className={`text-xs break-words ${isDarkMode ? "text-zinc-500" : "text-gray-400"}`}>
-                              {person.position}
-                            </p>
-                          </div>
-                          {renderRole(person.personRole, true)}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                  {availableJoinTargets.length === 0 ? (
+                    <div className="rounded-[1.4rem] border border-white/10 bg-white/[0.04] px-6 py-10 text-center text-slate-400">
+                      <Plus className="mx-auto mb-3 h-10 w-10 opacity-50" />
+                      <p>لا توجد خانات متاحة ومناسبة لك الآن.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {availableJoinTargets.map((target, idx) => (
+                        <button
+                          key={`${target.type}-${target.teamId ?? "none"}-${target.slotKey ?? idx}`}
+                          onClick={() => setSelectedSwapTarget(target)}
+                          className={`min-w-0 rounded-xl border p-3 text-right transition-all ${
+                            selectedSwapTarget && "type" in selectedSwapTarget && selectedSwapTarget.label === target.label
+                              ? "border-emerald-400/40 bg-emerald-500/10"
+                              : isDarkMode
+                                ? "border border-white/10 bg-white/[0.05] hover:bg-white/[0.08]"
+                                : "bg-white hover:bg-gray-50 border border-gray-200"
+                          }`}
+                        >
+                          <p className={`font-medium text-sm break-words ${isDarkMode ? "text-white" : "text-gray-900"}`}>
+                            {target.label}
+                          </p>
+                          <p className={`mt-2 text-xs break-words ${isDarkMode ? "text-zinc-400" : "text-gray-500"}`}>
+                            يوم {swapData.day} - {WEEKDAYS_AR[getDayOfWeek(swapData.day, calendarMonth, calendarYear)]}
+                          </p>
+                          <p className={`text-xs break-words ${isDarkMode ? "text-zinc-500" : "text-gray-400"}`}>
+                            {getShiftLabel(swapData.shift)}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="p-2">
-                  <p className={`text-sm mb-3 ${isDarkMode ? "text-slate-400" : "text-gray-500"}`}>
-                    اختر شخص للتبديل معه:
+                <div className="space-y-3 p-2">
+                  <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-gray-500"}`}>
+                    الأشخاص المتوافقون مع عملية التبديل:
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {getAllScheduledPeople.filter(p => p.personId !== swapData.personId).slice(0, 20).map((person, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => {
-                          setSelectedSwapTarget(person);
-                          setShowSwapConfirm(true);
-                        }}
-                        className={`min-w-0 p-3 rounded-xl text-right transition-all ${
-                          isDarkMode
-                            ? "border border-white/10 bg-white/[0.05] hover:bg-white/[0.08]"
-                            : "bg-white hover:bg-gray-50 border border-gray-200"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <p className={`font-medium text-sm break-words ${isDarkMode ? "text-white" : "text-gray-900"}`}>
-                              {person.personName}
-                            </p>
-                            <p className={`text-xs break-words ${isDarkMode ? "text-zinc-400" : "text-gray-500"}`}>
-                              يوم {person.day} - {WEEKDAYS_AR[getDayOfWeek(person.day, calendarMonth, calendarYear)]}
-                            </p>
-                            <p className={`text-xs break-words ${isDarkMode ? "text-zinc-500" : "text-gray-400"}`}>
-                              {person.position}
-                            </p>
+                  {availableSwapTargets.length === 0 ? (
+                    <div className="rounded-[1.4rem] border border-white/10 bg-white/[0.04] px-6 py-10 text-center text-slate-400">
+                      <ArrowRightLeft className="mx-auto mb-3 h-10 w-10 opacity-50" />
+                      <p>لا توجد خيارات تبديل مناسبة الآن.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {availableSwapTargets.map((person) => (
+                        <button
+                          key={`${person.personId}-${person.day}-${person.shift}-${person.position}`}
+                          onClick={() => setSelectedSwapTarget(person)}
+                          className={`min-w-0 p-3 rounded-xl text-right transition-all ${
+                            selectedSwapTarget &&
+                            !("type" in selectedSwapTarget) &&
+                            selectedSwapTarget.personId === person.personId &&
+                            selectedSwapTarget.day === person.day &&
+                            selectedSwapTarget.shift === person.shift
+                              ? "border-rose-400/40 bg-rose-500/10"
+                              : isDarkMode
+                                ? "border border-white/10 bg-white/[0.05] hover:bg-white/[0.08]"
+                                : "bg-white hover:bg-gray-50 border border-gray-200"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className={`font-medium text-sm break-words ${isDarkMode ? "text-white" : "text-gray-900"}`}>
+                                {person.personName}
+                              </p>
+                              <p className={`text-xs break-words ${isDarkMode ? "text-zinc-400" : "text-gray-500"}`}>
+                                يوم {person.day} - {WEEKDAYS_AR[getDayOfWeek(person.day, calendarMonth, calendarYear)]}
+                              </p>
+                              <p className={`text-xs break-words ${isDarkMode ? "text-zinc-500" : "text-gray-400"}`}>
+                                {person.position} • {getShiftLabel(person.shift)}
+                              </p>
+                            </div>
+                            {renderRole(person.personRole, true)}
                           </div>
-                          {renderRole(person.personRole, true)}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </ScrollArea>
 
+            <div className="mt-4 rounded-[1.4rem] border border-white/10 bg-white/[0.04] p-4">
+              <p className="text-sm font-medium text-white">النتيجة المتوقعة</p>
+              <p className="mt-2 text-xs leading-7 text-slate-300">
+                {swapMode === "swap"
+                  ? selectedTargetName
+                    ? `سيتم تبديل مناوبة ${swapData.personName} مع ${selectedTargetName} مباشرة، وسيُحدَّث الجدول فورًا مع إرسال إشعار للطرف الآخر.`
+                    : "اختر الطرف الآخر أولًا ليتم تجهيز تبديل مباشر وقابل للتتبع."
+                  : selectedTargetName
+                    ? `إذا بقيت الخانة متاحة وكانت شروط الانضمام متحققة، سيتم تثبيت انضمامك إلى ${selectedTargetName} مباشرة مع إشعار ذكي وسجل محفوظ.`
+                    : "اختر الخانة الشاغرة أولًا لتجهيز الانضمام المباشر."}
+              </p>
+            </div>
+
             <div className="flex gap-2 pt-3">
               <Button variant="outline" onClick={() => setShowSwapDialog(false)} className="flex-1">
                 إلغاء
+              </Button>
+              <Button onClick={() => setShowSwapConfirm(true)} disabled={!selectedSwapTarget} className="flex-1">
+                متابعة
               </Button>
             </div>
           </DialogContent>
@@ -3102,21 +3781,17 @@ export function AppContent() {
           <DialogContent className="max-w-md border-white/10 bg-[linear-gradient(180deg,rgba(21,31,53,0.96),rgba(10,16,30,0.94))]">
             <DialogHeader>
               <DialogTitle className="text-lg text-white">
-                تأكيد {swapMode === "swap" ? "التبديل" : swapMode === "replace" ? "الاستبدال" : "الانضمام"}
+                تأكيد {swapMode === "swap" ? "التبديل الفوري" : "الانضمام"}
               </DialogTitle>
             </DialogHeader>
             <div className="rounded-[1.4rem] border border-white/10 bg-white/[0.05] p-4">
               {swapMode === "swap" ? (
                 <p className={`text-sm ${isDarkMode ? "text-slate-200" : "text-gray-600"}`}>
-                  هل أنت متأكد من تبديل <strong>{swapData.personName}</strong> مع <strong>{selectedSwapTarget?.personName}</strong>؟
-                </p>
-              ) : swapMode === "replace" ? (
-                <p className={`text-sm ${isDarkMode ? "text-slate-200" : "text-gray-600"}`}>
-                  هل أنت متأكد أن <strong>{swapData.personName}</strong> سيأخذ مكان <strong>{selectedSwapTarget?.personName}</strong>؟
+                  سيتم تبديل مناوبة <strong>{swapData.personName}</strong> مع <strong>{selectedTargetName}</strong> الآن، وسيصل إشعار مباشر للطرف الآخر بعد تحديث الجدول.
                 </p>
               ) : (
                 <p className={`text-sm ${isDarkMode ? "text-slate-200" : "text-gray-600"}`}>
-                  هل أنت متأكد من انضمام <strong>{swapData.personName}</strong> للمكان المحدد؟
+                  سيتم التحقق من الخانة المختارة، وإذا بقيت متاحة ستتم إضافة <strong>{swapData.personName}</strong> مباشرة إلى <strong>{selectedTargetName}</strong>.
                 </p>
               )}
             </div>
@@ -3124,44 +3799,15 @@ export function AppContent() {
               <Button variant="outline" onClick={() => setShowSwapConfirm(false)} className="flex-1">
                 إلغاء
               </Button>
-              <Button
-                onClick={() => {
-                  const actionLabel = swapMode === "swap" ? "التبديل" : swapMode === "replace" ? "الاستبدال" : "الانضمام";
-                  const now = new Date().toISOString();
-
-                  setSwapLogs((prev) => [
-                    {
-                      id: buildEventId(),
-                      performedBy: user?.id || "system",
-                      performedByName: user?.name || "النظام",
-                      person1Id: swapData.personId,
-                      person1Name: swapData.personName,
-                      person1Role: swapData.personRole,
-                      person1Day: swapData.day,
-                      person1Shift: swapData.shift,
-                      person1Position: swapData.position,
-                      person2Id: selectedSwapTarget?.personId || "target",
-                      person2Name: selectedSwapTarget?.personName || "غير محدد",
-                      person2Role: selectedSwapTarget?.personRole || swapData.personRole,
-                      person2Day: selectedSwapTarget?.day || swapData.day,
-                      person2Shift: selectedSwapTarget?.shift || swapData.shift,
-                      person2Position: selectedSwapTarget?.position || swapData.position,
-                      createdAt: now,
-                    },
-                    ...prev,
-                  ]);
-                  appendEvent(
-                    "info",
-                    `عملية ${actionLabel}`,
-                    `تم تسجيل ${actionLabel} بين ${swapData.personName}${selectedSwapTarget ? ` و${selectedSwapTarget.personName}` : ""}.`
-                  );
-                  toast.success(`تم ${swapMode === "swap" ? "التبديل" : swapMode === "replace" ? "الاستبدال" : "الانضمام"} بنجاح`);
-                  setShowSwapConfirm(false);
-                  setShowSwapDialog(false);
-                }}
-                className="flex-1"
-              >
-                تأكيد
+              <Button onClick={() => void submitShiftRequest()} disabled={isSubmittingShiftRequest} className="flex-1">
+                {isSubmittingShiftRequest ? (
+                  <>
+                    <RefreshCw className="ml-2 h-4 w-4 animate-spin" />
+                    جاري التنفيذ...
+                  </>
+                ) : (
+                  "تنفيذ الآن"
+                )}
               </Button>
             </div>
           </DialogContent>
@@ -3349,6 +3995,23 @@ export function AppContent() {
                 <CalendarDays className="h-4 w-4" />
                 الأحداث
               </Button>
+
+              {isAdmin && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowRequestsDialog(true)}
+                  className="relative border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                >
+                  <ArrowRightLeft className="h-4 w-4" />
+                  <span className="hidden sm:inline">مراقبة المناوبات</span>
+                  {adminShiftLogCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-sky-500 px-1 text-[10px] text-white">
+                      {adminShiftLogCount}
+                    </span>
+                  )}
+                </Button>
+              )}
 
               <Button
                 variant="ghost"
@@ -4066,7 +4729,7 @@ export function AppContent() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className={mutedTextClass}>التبديلات</span>
-                      <Badge className="bg-amber-600">{swapLogs.length}</Badge>
+                      <Badge className="bg-amber-600">{shiftRequests.length}</Badge>
                     </div>
                   </div>
                 </CardContent>
@@ -4345,6 +5008,7 @@ export function AppContent() {
 
       {renderNotificationsPopup()}
       {renderEventsPopup()}
+      {isAdmin && renderRequestsDialog()}
       {renderSwapDialog()}
 
       {showAssignDialog && (
@@ -4862,12 +5526,23 @@ export function AppContent() {
                 {SHIFTS.map(shift => {
                   const shiftStructure = schedule[calendarDetailDay || 0]?.[shift.value];
                   if (!shiftStructure) return null;
+                  const currentUserAssignment = user
+                    ? getAllScheduledPeople.find(
+                        (person) =>
+                          person.personId === user.id &&
+                          person.day === (calendarDetailDay || 0) &&
+                          person.shift === shift.value
+                      ) ?? null
+                    : null;
+                  const currentUserJoinTargets = calendarDetailDay
+                    ? getCurrentUserJoinTargets(calendarDetailDay, shift.value)
+                    : [];
                   
                   const hasPeople = shiftStructure.teams.some(t => t.members.length > 0) ||
                                    shiftStructure.operations.length > 0 ||
                                    shiftStructure.sector;
                   
-                  if (!hasPeople) return null;
+                  if (!hasPeople && !currentUserAssignment && currentUserJoinTargets.length === 0) return null;
                   
                   return (
                     <div key={shift.value} className={`min-w-0 rounded-[1.4rem] border p-4 ${isDarkMode ? "border-white/10 bg-white/[0.05]" : "bg-gray-50"}`}>
@@ -4923,6 +5598,65 @@ export function AppContent() {
                           <span className={`rounded-full border px-2.5 py-1 text-xs ${isDarkMode ? "border-white/[0.08] bg-white/[0.04]" : "bg-white border"}`}>
                             {shiftStructure.sector.userName}
                           </span>
+                        </div>
+                      )}
+
+                      {(currentUserAssignment || currentUserJoinTargets.length > 0) && (
+                        <div className="mt-4 rounded-[1.2rem] border border-white/10 bg-white/[0.04] p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-white">إجراءاتك على هذه المناوبة</p>
+                            <Badge className="bg-emerald-600 text-white">تنفيذ فوري</Badge>
+                          </div>
+                          <p className="mt-2 text-xs leading-6 text-slate-400">
+                            يمكنك من هنا تبديل مناوبتك مباشرة مع شخص آخر، أو الانضمام فورًا إذا كانت هناك خانة مناسبة لك وما زلت ضمن التفرغ المسجل.
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {currentUserAssignment && (
+                              <Button
+                                size="sm"
+                                onClick={() =>
+                                  openSwapDialog({
+                                    day: currentUserAssignment.day,
+                                    shift: currentUserAssignment.shift,
+                                    personId: currentUserAssignment.personId,
+                                    personName: currentUserAssignment.personName,
+                                    personRole: currentUserAssignment.personRole,
+                                    position: currentUserAssignment.position,
+                                    teamId: currentUserAssignment.teamId,
+                                    locationType: currentUserAssignment.locationType,
+                                    slotKey: currentUserAssignment.slotKey ?? null,
+                                    initialMode: "swap",
+                                  })
+                                }
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                <ArrowRightLeft className="ml-2 h-4 w-4" />
+                                تبديل فوري
+                              </Button>
+                            )}
+                            {!currentUserAssignment && currentUserJoinTargets.length > 0 && user && (
+                              <Button
+                                size="sm"
+                                onClick={() =>
+                                  openSwapDialog({
+                                    day: calendarDetailDay || 0,
+                                    shift: shift.value,
+                                    personId: user.id,
+                                    personName: user.name,
+                                    personRole: user.role,
+                                    position: null,
+                                    teamId: null,
+                                    locationType: null,
+                                    initialMode: "join",
+                                  })
+                                }
+                                className="bg-emerald-600 hover:bg-emerald-700"
+                              >
+                                <Plus className="ml-2 h-4 w-4" />
+                                انضمام فوري
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>

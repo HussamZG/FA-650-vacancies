@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { ensureCurrentAppUserProfile, requireAdminUser } from "@/lib/server-auth";
+import {
+  parseScheduleDocument,
+  serializeScheduleDocument,
+} from "@/lib/schedule/collaboration";
 
 function handleAuthError(error: unknown, forbiddenMessage: string) {
   if (error instanceof Error && error.message === "FORBIDDEN") {
@@ -12,17 +16,6 @@ function handleAuthError(error: unknown, forbiddenMessage: string) {
   }
 
   return null;
-}
-
-function parseSchedulePayload(value: string | null | undefined) {
-  if (!value) return {};
-
-  try {
-    const parsed = JSON.parse(value);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
 }
 
 async function writeAuditLog(payload: {
@@ -84,7 +77,8 @@ export async function GET(request: Request) {
       schedule: data
         ? {
             ...data,
-            data: parseSchedulePayload(data.data),
+            data: parseScheduleDocument(data.data).days,
+            collaboration: parseScheduleDocument(data.data).collaboration,
           }
         : null,
     });
@@ -135,11 +129,15 @@ export async function PUT(request: Request) {
       throw new Error(existingError.message || "تعذر التحقق من الجدول الحالي");
     }
 
+    const existingDocument = parseScheduleDocument(existing?.data);
     const payload = {
       id: existing?.id ?? crypto.randomUUID(),
       month,
       year,
-      data: JSON.stringify(scheduleData),
+      data: serializeScheduleDocument({
+        days: scheduleData,
+        collaboration: existingDocument.collaboration,
+      }),
       updatedBy: user.id,
       updatedAt: new Date().toISOString(),
     };
@@ -158,8 +156,18 @@ export async function PUT(request: Request) {
       action: existing ? "update" : "create",
       recordId: data.id,
       userId: user.id,
-      oldData: existing ? JSON.stringify({ ...existing, data: parseSchedulePayload(existing.data) }) : undefined,
-      newData: JSON.stringify({ ...data, data: scheduleData }),
+      oldData: existing
+        ? JSON.stringify({
+            ...existing,
+            data: existingDocument.days,
+            collaboration: existingDocument.collaboration,
+          })
+        : undefined,
+      newData: JSON.stringify({
+        ...data,
+        data: scheduleData,
+        collaboration: existingDocument.collaboration,
+      }),
     });
 
     return NextResponse.json({
@@ -167,6 +175,7 @@ export async function PUT(request: Request) {
       schedule: {
         ...data,
         data: scheduleData,
+        collaboration: existingDocument.collaboration,
       },
       message: "تم حفظ الجدول بنجاح",
     });
@@ -231,7 +240,11 @@ export async function DELETE(request: Request) {
       action: "delete",
       recordId: existing.id,
       userId: user.id,
-      oldData: JSON.stringify({ ...existing, data: parseSchedulePayload(existing.data) }),
+      oldData: JSON.stringify({
+        ...existing,
+        data: parseScheduleDocument(existing.data).days,
+        collaboration: parseScheduleDocument(existing.data).collaboration,
+      }),
     });
 
     return NextResponse.json({

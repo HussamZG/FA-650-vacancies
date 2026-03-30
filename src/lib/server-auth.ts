@@ -1,3 +1,4 @@
+import { getCurrentSessionUser } from "@/lib/app-session";
 import { createClient } from "@/utils/supabase/server";
 import {
   getDefaultAppRole,
@@ -30,7 +31,7 @@ async function upsertCurrentUserProfile() {
 
   const { data: existingProfile, error: existingProfileError } = await supabase
     .from("User")
-    .select("id, name, email, role, isActive, isAdmin")
+    .select("id, name, email, password, role, isActive, isAdmin")
     .eq("id", authUser.id)
     .maybeSingle();
 
@@ -42,7 +43,10 @@ async function upsertCurrentUserProfile() {
     id: authUser.id,
     name: authUser.user_metadata?.name || getDefaultName(authUser.email),
     email: authUser.email,
-    password: "supabase-auth",
+    password:
+      typeof existingProfile?.password === "string" && existingProfile.password.length > 0
+        ? existingProfile.password
+        : "supabase-auth",
     role: getDefaultAppRole(authUser.user_metadata?.role),
     isActive: existingProfile?.isActive ?? true,
     isAdmin: existingProfile?.isAdmin ?? Boolean(authUser.user_metadata?.is_admin),
@@ -61,6 +65,12 @@ async function upsertCurrentUserProfile() {
 }
 
 export async function getCurrentAppUser(): Promise<AppUser | null> {
+  const sessionUser = await getCurrentSessionUser();
+
+  if (sessionUser) {
+    return sessionUser;
+  }
+
   const profile = await upsertCurrentUserProfile();
 
   if (!profile || !profile.isActive) {
@@ -78,6 +88,12 @@ export async function getCurrentAppUser(): Promise<AppUser | null> {
 }
 
 export async function ensureCurrentAppUserProfile(): Promise<AppUser | null> {
+  const sessionUser = await getCurrentSessionUser();
+
+  if (sessionUser) {
+    return sessionUser;
+  }
+
   const profile = await upsertCurrentUserProfile();
 
   if (!profile || !profile.isActive) {
