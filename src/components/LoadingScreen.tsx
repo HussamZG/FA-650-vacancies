@@ -14,9 +14,9 @@ export function LoadingScreen({ isVisible }: LoadingScreenProps) {
           initial={{ opacity: 1 }}
           exit={{ opacity: 0, scale: 1.05 }}
           transition={{ duration: 0.8 }}
-          className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden bg-gradient-to-br from-red-100 via-white to-red-200 backdrop-blur-xl"
+          className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#0b1220] via-[#0d1528] to-[#09101f] backdrop-blur-xl"
         >
-          <div className="absolute h-[400px] w-[400px] rounded-full bg-red-400/20 blur-3xl animate-pulse" />
+          <div className="absolute h-[400px] w-[400px] rounded-full bg-[#ff5f6d]/20 blur-3xl animate-pulse" />
 
           <div className="relative flex flex-col items-center space-y-10 px-6 text-center">
             <motion.div
@@ -33,10 +33,10 @@ export function LoadingScreen({ isVisible }: LoadingScreenProps) {
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.5 }}
             >
-              <h1 className="text-4xl font-bold tracking-wide text-gray-800 sm:text-5xl">
+              <h1 className="text-4xl font-bold tracking-wide text-white sm:text-5xl">
                 FA-650 Emergency
               </h1>
-              <p className="mt-2 text-sm text-gray-500 sm:text-base">
+              <p className="mt-2 text-sm text-[#ffb3bb] sm:text-base">
                 Saving lives, every second counts...
               </p>
             </motion.div>
@@ -45,7 +45,7 @@ export function LoadingScreen({ isVisible }: LoadingScreenProps) {
               <motion.path
                 d="M0 25 L20 25 L30 5 L40 45 L50 25 L200 25"
                 fill="none"
-                stroke="#E53935"
+                stroke="#ff5f6d"
                 strokeWidth="2"
                 strokeDasharray="200"
                 strokeDashoffset="200"
@@ -59,7 +59,7 @@ export function LoadingScreen({ isVisible }: LoadingScreenProps) {
             </svg>
 
             <motion.div
-              className="h-12 w-12 rounded-full border-4 border-red-200 border-t-red-600"
+              className="h-12 w-12 rounded-full border-4 border-white/10 border-t-[#ff5f6d]"
               animate={{ rotate: 360 }}
               transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
             />
