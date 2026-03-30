@@ -71,7 +71,8 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="ring-offset-background focus:ring-ring data-[state=open]:bg-white/[0.08] data-[state=open]:text-white absolute top-4 right-4 rounded-full border border-white/10 bg-white/5 p-2 opacity-80 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="ring-offset-background focus:ring-ring data-[state=open]:bg-white/[0.08] data-[state=open]:text-white absolute top-4 rounded-full border border-white/10 bg-white/5 p-2 opacity-80 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            style={{ insetInlineEnd: "1rem" }}
           >
             <XIcon />
             <span className="sr-only">Close</span>
@@ -82,11 +83,12 @@ function DialogContent({
   )
 }
 
-function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
+function DialogHeader({ className, style, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
       className={cn("flex flex-col gap-2 text-center sm:text-left", className)}
+      style={{ paddingInlineEnd: "3.5rem", ...style }}
       {...props}
     />
   )
@@ -112,7 +114,7 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-lg leading-none font-semibold", className)}
+      className={cn("min-w-0 break-words text-lg leading-none font-semibold", className)}
       {...props}
     />
   )

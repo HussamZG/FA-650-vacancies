@@ -184,6 +184,12 @@ interface GenerationSummary {
   underMinimumTeams: number;
 }
 
+interface AvailabilitySubmissionFeedback {
+  status: "submitting" | "success" | "error";
+  title: string;
+  message: string;
+}
+
 const SHIFTS = [
   { value: "morning" as Shift, label: "صباحي", icon: <Sun className="h-4 w-4" />, color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/30", activeBg: "bg-amber-500/30 border-amber-500" },
   { value: "evening" as Shift, label: "مسائي", icon: <Sunset className="h-4 w-4" />, color: "text-orange-400", bgColor: "bg-orange-500/10 border-orange-500/30", activeBg: "bg-orange-500/30 border-orange-500" },
@@ -516,6 +522,7 @@ export function AppContent() {
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionFeedback, setSubmissionFeedback] = useState<AvailabilitySubmissionFeedback | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [availability, setAvailability] = useState<Record<string, Shift[]>>({
     sunday: [], monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: []
@@ -1015,6 +1022,7 @@ export function AppContent() {
     setScheduleYear(year);
     setCalendarMonth(month);
     setCalendarYear(year);
+    setSubmissionFeedback(null);
   };
 
   const appendEvent = (type: NotificationEvent["type"], title: string, message: string) => {
@@ -1163,6 +1171,11 @@ export function AppContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setSubmissionFeedback({
+      status: "submitting",
+      title: editingId ? "جاري تحديث التفرغات" : "جاري إرسال التفرغات",
+      message: "يرجى الانتظار حتى يكتمل حفظ بيانات التفرغ.",
+    });
 
     try {
       const payload = {
@@ -1194,18 +1207,34 @@ export function AppContent() {
         throw new Error(data.error || "تعذر حفظ التفرغات");
       }
 
+      const monthLabel = MONTHS.find((month) => month.value === Number(selectedMonth))?.label ?? selectedMonth;
+      const successMessage = data.message || "تم حفظ التفرغات بنجاح";
+
       toast.success(data.message || "تم حفظ التفرغات بنجاح");
+      setSubmissionFeedback({
+        status: "success",
+        title: editingId ? "تم تحديث التفرغات" : "تم إرسال التفرغات",
+        message: monthLabel
+          ? `${successMessage} لشهر ${monthLabel} ${selectedYear}.`
+          : successMessage,
+      });
       appendEvent(
         "success",
         editingId ? "تحديث التفرغات" : "حفظ التفرغات",
-        `${editingId ? "تم تحديث" : "تم حفظ"} تفرغات ${user?.name || "المستخدم"} لشهر ${MONTHS.find((month) => month.value === Number(selectedMonth))?.label} ${selectedYear}.`
+        `${editingId ? "تم تحديث" : "تم حفظ"} تفرغات ${user?.name || "المستخدم"} لشهر ${monthLabel} ${selectedYear}.`
       );
       setNotes("");
       setEditingId(null);
       setAvailability({ sunday: [], monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [] });
       await refreshAvailabilityRecords();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "حدث خطأ أثناء حفظ التفرغات");
+      const errorMessage = error instanceof Error ? error.message : "حدث خطأ أثناء حفظ التفرغات";
+      toast.error(errorMessage);
+      setSubmissionFeedback({
+        status: "error",
+        title: "لم يتم إرسال التفرغات",
+        message: `${errorMessage}. حاول مرة أخرى بعد التأكد من البيانات.`,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -3419,11 +3448,11 @@ export function AppContent() {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:max-w-2xl">
+                      <div className="min-w-0">
                         <label className={`mb-2 block text-sm font-medium ${isDarkMode ? "text-slate-200" : "text-gray-700"}`}>الشهر</label>
                         <Select value={selectedMonth} onValueChange={(value) => setActivePeriod(parseInt(value, 10), parseInt(selectedYear, 10))}>
-                          <SelectTrigger className={selectTriggerClass}>
+                          <SelectTrigger className={`w-full ${selectTriggerClass}`}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -3433,10 +3462,10 @@ export function AppContent() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <label className={`mb-2 block text-sm font-medium ${isDarkMode ? "text-slate-200" : "text-gray-700"}`}>السنة</label>
                         <Select value={selectedYear} onValueChange={(value) => setActivePeriod(parseInt(selectedMonth, 10), parseInt(value, 10))}>
-                          <SelectTrigger className={selectTriggerClass}>
+                          <SelectTrigger className={`w-full ${selectTriggerClass}`}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -3463,6 +3492,42 @@ export function AppContent() {
                         className={searchInputClass}
                       />
                     </div>
+
+                    <AnimatePresence initial={false}>
+                      {submissionFeedback && (
+                        <motion.div
+                          key={submissionFeedback.status}
+                          initial={{ opacity: 0, y: -8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          transition={{ duration: 0.2 }}
+                          aria-live="polite"
+                          className={`rounded-2xl border px-4 py-3 ${
+                            submissionFeedback.status === "success"
+                              ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-100"
+                              : submissionFeedback.status === "error"
+                                ? "border-rose-400/30 bg-rose-500/10 text-rose-100"
+                                : "border-sky-400/30 bg-sky-500/10 text-sky-100"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            {submissionFeedback.status === "success" ? (
+                              <CheckCircle className="mt-0.5 h-5 w-5 shrink-0" />
+                            ) : submissionFeedback.status === "error" ? (
+                              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+                            ) : (
+                              <RefreshCw className="mt-0.5 h-5 w-5 shrink-0 animate-spin" />
+                            )}
+                            <div className="min-w-0">
+                              <p className="font-semibold">{submissionFeedback.title}</p>
+                              <p className="mt-1 text-sm leading-6 opacity-90">
+                                {submissionFeedback.message}
+                              </p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
 
                     <div className="flex items-center justify-between gap-4">
                       <Badge className="bg-red-600 text-white">
@@ -4124,10 +4189,10 @@ export function AppContent() {
           }
         }}
       >
-        <DialogContent className="w-[95vw] max-w-2xl overflow-hidden border-white/10 bg-[linear-gradient(180deg,rgba(21,31,53,0.96),rgba(10,16,30,0.94))] p-0 shadow-[0_32px_80px_rgba(2,6,23,0.45)]">
-          <div className="border-b border-white/10 px-6 py-5">
+        <DialogContent className="w-[calc(100vw-1rem)] max-h-[92vh] max-w-2xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden border-white/10 bg-[linear-gradient(180deg,rgba(21,31,53,0.96),rgba(10,16,30,0.94))] p-0 shadow-[0_32px_80px_rgba(2,6,23,0.45)] sm:w-[95vw]">
+          <div className="shrink-0 border-b border-white/10 px-4 py-5 sm:px-6">
             <DialogHeader className="text-right">
-              <DialogTitle className="flex items-center gap-3 text-lg text-white lg:text-xl">
+              <DialogTitle className="flex min-w-0 items-center gap-3 text-lg text-white lg:text-xl">
                 <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
                   {editingPersonnelId ? (
                     <ShieldCheck className="h-5 w-5 text-[#ff6f7c]" />
@@ -4135,7 +4200,9 @@ export function AppContent() {
                     <UserPlus className="h-5 w-5 text-[#ff6f7c]" />
                   )}
                 </div>
-                {editingPersonnelId ? "تعديل بيانات الكادر" : "إضافة كادر جديد"}
+                <span className="min-w-0 break-words">
+                  {editingPersonnelId ? "تعديل بيانات الكادر" : "إضافة كادر جديد"}
+                </span>
               </DialogTitle>
             </DialogHeader>
             <p className="mt-3 text-sm leading-7 text-slate-300">
@@ -4145,9 +4212,9 @@ export function AppContent() {
             </p>
           </div>
 
-          <form onSubmit={handlePersonnelSubmit} className="space-y-5 px-6 py-6 text-right">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
+          <form onSubmit={handlePersonnelSubmit} className="min-h-0 space-y-5 overflow-y-auto overflow-x-hidden px-4 py-6 text-right sm:px-6">
+            <div className="grid min-w-0 gap-4 md:grid-cols-2">
+              <div className="min-w-0 space-y-2">
                 <label className="text-sm font-medium text-slate-200">الاسم الكامل</label>
                 <Input
                   value={personnelForm.name}
@@ -4158,13 +4225,13 @@ export function AppContent() {
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <label className="text-sm font-medium text-slate-200">الرتبة</label>
                 <Select
                   value={personnelForm.role}
                   onValueChange={(value) => setPersonnelForm((prev) => ({ ...prev, role: value as Role }))}
                 >
-                  <SelectTrigger className={selectTriggerClass}>
+                  <SelectTrigger className={`w-full ${selectTriggerClass}`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -4175,7 +4242,7 @@ export function AppContent() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <label className="text-sm font-medium text-slate-200">البريد الإلكتروني</label>
                 <Input
                   value={personnelForm.email}
@@ -4190,7 +4257,7 @@ export function AppContent() {
                 </p>
               </div>
 
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <label className="text-sm font-medium text-slate-200">
                   {editingPersonnelId ? "كلمة المرور" : "كلمة المرور الأولية"}
                 </label>
@@ -4210,10 +4277,10 @@ export function AppContent() {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className={`rounded-2xl border p-4 ${softSurfaceClass}`}>
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-1 text-right">
+            <div className="grid min-w-0 gap-4 md:grid-cols-2">
+              <div className={`min-w-0 rounded-2xl border p-4 ${softSurfaceClass}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 space-y-1 text-right">
                     <p className="text-sm font-medium text-white">صلاحية الإدارة</p>
                     <p className={`text-xs leading-6 ${mutedTextClass}`}>
                       من يملك هذه الصلاحية فقط يمكنه إنشاء الحسابات أو تعديل الكوادر داخل الموقع، بغض النظر عن رتبته.
@@ -4226,9 +4293,9 @@ export function AppContent() {
                 </div>
               </div>
 
-              <div className={`rounded-2xl border p-4 ${softSurfaceClass}`}>
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-1 text-right">
+              <div className={`min-w-0 rounded-2xl border p-4 ${softSurfaceClass}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 space-y-1 text-right">
                     <p className="text-sm font-medium text-white">حالة الحساب</p>
                     <p className={`text-xs leading-6 ${mutedTextClass}`}>
                       عند التعطيل يبقى الكادر محفوظًا لكن يُمنع من استخدام الموقع حتى يتم تفعيله من جديد.
