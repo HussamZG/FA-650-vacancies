@@ -71,7 +71,7 @@ export function LoginPage() {
     } else {
       setSuccess(result.message || "تم إنشاء الحساب بنجاح");
       setConfirmPassword("");
-      if ((result.message || "").includes("تأكيد الحساب")) {
+      if (result.shouldGoToLogin) {
         setMode("login");
       }
     }
@@ -146,12 +146,6 @@ export function LoginPage() {
                 </motion.div>
               )}
 
-              {mode === "login" && (
-                <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-xs leading-7 text-amber-100/90">
-                  إذا أنشأت الحساب للتو ولم تستطع الدخول، فالغالب أن Supabase يطلب تأكيد البريد الإلكتروني أولًا.
-                </div>
-              )}
-
               <TabsContent value="login">
                 <form onSubmit={handleLogin} className="space-y-5">
                   <div className="space-y-2">
@@ -213,10 +207,6 @@ export function LoginPage() {
                     )}
                   </Button>
                 </form>
-
-                <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs leading-7 text-slate-300">
-                  بعد إنشاء الحساب قد يطلب منك Supabase تأكيد البريد الإلكتروني قبل أول تسجيل دخول، حسب إعدادات المشروع.
-                </div>
               </TabsContent>
 
               <TabsContent value="register">

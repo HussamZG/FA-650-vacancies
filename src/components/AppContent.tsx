@@ -737,7 +737,7 @@ export function AppContent() {
     } catch (error) {
       console.error(error);
       setManagedUsers([]);
-      toast.error(error instanceof Error ? error.message : "تعذر تحميل الكوادر من Supabase");
+      toast.error(error instanceof Error ? error.message : "تعذر تحميل الكوادر");
     } finally {
       setIsLoadingManagedUsers(false);
     }
@@ -779,7 +779,7 @@ export function AppContent() {
       console.error(error);
       skipNextScheduleSyncRef.current = true;
       setSchedule({});
-      toast.error(error instanceof Error ? error.message : "تعذر تحميل الجدول من Supabase");
+      toast.error(error instanceof Error ? error.message : "تعذر تحميل الجدول");
     } finally {
       hasLoadedScheduleRef.current = true;
       setIsLoadingSchedule(false);
@@ -1341,8 +1341,8 @@ export function AppContent() {
         "success",
         editingPersonnelId ? "تحديث كادر" : "إضافة كادر",
         editingPersonnelId
-          ? `تم تحديث بيانات ${payload.name} وربطها مع بيانات Supabase.`
-          : `تمت إضافة ${payload.name} إلى الكوادر وحفظ بياناته في Supabase.`
+          ? `تم تحديث بيانات ${payload.name} وربطها بملفه التشغيلي.`
+          : `تمت إضافة ${payload.name} إلى الكوادر وحفظ بياناته بنجاح.`
       );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "حدث خطأ أثناء حفظ الكادر");
@@ -3412,7 +3412,7 @@ export function AppContent() {
               <Card className={surfaceClass}>
                 <CardHeader>
                   <CardTitle className="text-lg sm:text-xl">نموذج التفرغات الشهرية</CardTitle>
-                  <CardDescription>حدد أوقات تفرغك خلال الأسبوع. يتم الحفظ والقراءة من قاعدة Supabase مباشرة.</CardDescription>
+                  <CardDescription>حدد أوقات تفرغك خلال الأسبوع. يتم حفظ التغييرات وعرضها مباشرة داخل النظام.</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleSubmit} className="space-y-6">
@@ -3544,7 +3544,7 @@ export function AppContent() {
                     <span className="mx-1">الصباح: 4 فرق و4 عمليات. المساء: 3 فرق و3 عمليات مع رابع اختياري. الليل: فريقان فقط، والعمليات فيه 2 مستهدفة مع إمكانية رفعها يدويًا حتى 4 عند الحاجة.</span>
                     <span className="mx-1">كل فريق إسعاف صالح تشغيليًا يجب أن يضم على الأقل: قائد + كشاف + مسعف.</span>
                     <span className="mx-1">الحد الأعلى الموصى به لكل فرد هو {MAX_SHIFTS_PER_PERSON} مناوبة شهريًا، وتظهر التحذيرات عند تجاوزه أو عند وجود نقص في المناوبة.</span>
-                    <span className="mx-1">كل تعديل على الجدول والتقويم يتم حفظه واسترجاعه من Supabase.</span>
+                    <span className="mx-1">كل تعديل على الجدول والتقويم يتم حفظه واسترجاعه تلقائيًا داخل النظام.</span>
                   </div>
                 </CardContent>
               </Card>
@@ -3715,7 +3715,7 @@ export function AppContent() {
                   <CardContent className="py-10 text-center">
                     <RefreshCw className="mx-auto mb-3 h-8 w-8 animate-spin text-red-500" />
                     <p className={mutedTextClass}>
-                      {isLoadingRecords ? "جاري تحميل التفرغات من Supabase..." : "جاري تحميل الجدول من Supabase..."}
+                      {isLoadingRecords ? "جاري تحميل التفرغات..." : "جاري تحميل الجدول..."}
                     </p>
                   </CardContent>
                 </Card>
@@ -3725,7 +3725,7 @@ export function AppContent() {
                     <CalendarDays className="mx-auto mb-3 h-10 w-10 text-red-500/70" />
                     <p className="font-medium">لا توجد تفرغات محفوظة لهذا الشهر</p>
                     <p className={`mt-2 text-sm ${mutedTextClass}`}>
-                      أضف التفرغات أولًا، ثم أنشئ الجدول من البيانات المحفوظة في Supabase.
+                      أضف التفرغات أولًا، ثم أنشئ الجدول من البيانات المحفوظة.
                     </p>
                   </CardContent>
                 </Card>
@@ -3780,7 +3780,7 @@ export function AppContent() {
                 <Card className={surfaceClass}>
                   <CardContent className="py-10 text-center">
                     <RefreshCw className="mx-auto mb-3 h-8 w-8 animate-spin text-red-500" />
-                    <p className={mutedTextClass}>جاري تحميل بيانات التقويم من Supabase...</p>
+                    <p className={mutedTextClass}>جاري تحميل بيانات التقويم...</p>
                   </CardContent>
                 </Card>
               ) : Object.keys(schedule).length === 0 ? (
@@ -3789,7 +3789,7 @@ export function AppContent() {
                     <Calendar className="mx-auto mb-3 h-10 w-10 text-red-500/70" />
                     <p className="font-medium">لا يوجد جدول مولّد بعد</p>
                     <p className={`mt-2 text-sm ${mutedTextClass}`}>
-                      التقويم يعرض الجدول المحفوظ في Supabase لنفس الشهر والسنة المختارين.
+                      التقويم يعرض الجدول المحفوظ لنفس الشهر والسنة المختارين.
                     </p>
                   </CardContent>
                 </Card>
@@ -3839,7 +3839,7 @@ export function AppContent() {
                           إدارة الكوادر
                         </CardTitle>
                         <CardDescription>
-                          من هنا يمكن للإدارة تعديل الاسم والرتبة وحالة الكادر، أو إضافة كادر جديد مع حفظ البيانات مباشرة في Supabase.
+                          من هنا يمكن للإدارة تعديل الاسم والرتبة وحالة الكادر، أو إضافة كادر جديد مع حفظ البيانات مباشرة.
                         </CardDescription>
                       </div>
                       <Button onClick={openCreatePersonnelDialog} className="bg-red-600 hover:bg-red-700">
@@ -3904,7 +3904,7 @@ export function AppContent() {
                     {isLoadingManagedUsers ? (
                       <div className="py-10 text-center">
                         <RefreshCw className="mx-auto mb-3 h-8 w-8 animate-spin text-red-500" />
-                        <p className={mutedTextClass}>جاري تحميل الكوادر من Supabase...</p>
+                        <p className={mutedTextClass}>جاري تحميل الكوادر...</p>
                       </div>
                     ) : filteredManagedUsers.length === 0 ? (
                       <div className="py-10 text-center">
@@ -4035,14 +4035,14 @@ export function AppContent() {
                   {isLoadingRecords ? (
                     <div className="py-10 text-center">
                       <RefreshCw className="mx-auto mb-3 h-8 w-8 animate-spin text-red-500" />
-                      <p className={mutedTextClass}>جاري تحميل السجلات من Supabase...</p>
+                      <p className={mutedTextClass}>جاري تحميل السجلات...</p>
                     </div>
                   ) : filteredRecords.length === 0 ? (
                     <div className="py-10 text-center">
                       <ClipboardList className="mx-auto mb-3 h-10 w-10 text-red-500/70" />
                       <p className="font-medium">لا توجد سجلات لعرضها</p>
                       <p className={`mt-2 text-sm ${mutedTextClass}`}>
-                        السجلات المعروضة هنا تأتي مباشرة من قاعدة بيانات Supabase.
+                        السجلات المعروضة هنا هي آخر البيانات المحفوظة داخل النظام.
                       </p>
                     </div>
                   ) : (
@@ -4135,8 +4135,8 @@ export function AppContent() {
             </DialogHeader>
             <p className="mt-3 text-sm leading-7 text-slate-300">
               {editingPersonnelId
-                ? "يمكنك تعديل كل بيانات الكادر من هنا، بما فيها البريد وكلمة المرور والرتبة والصلاحيات، وسيتم مزامنة التعديلات مباشرة مع Supabase."
-                : "أدخل بيانات الكادر الجديد لإنشاء حسابه وحفظ ملفه التشغيلي داخل Supabase."}
+                ? "يمكنك تعديل كل بيانات الكادر من هنا، بما فيها البريد وكلمة المرور والرتبة والصلاحيات، وسيتم حفظ التعديلات مباشرة."
+                : "أدخل بيانات الكادر الجديد لإنشاء حسابه وحفظ ملفه التشغيلي داخل النظام."}
             </p>
           </div>
 
@@ -4181,7 +4181,7 @@ export function AppContent() {
                   required
                 />
                 <p className="text-xs text-slate-500">
-                  سيتم حفظ البريد في ملف الكادر وفي نظام الدخول نفسه داخل Supabase.
+                  سيتم حفظ البريد في ملف الكادر وفي نظام الدخول نفسه.
                 </p>
               </div>
 
@@ -4240,7 +4240,7 @@ export function AppContent() {
             <div className={`rounded-2xl border p-4 text-sm leading-7 ${softSurfaceClass}`}>
               <p className="font-medium text-white">آلية الحفظ</p>
               <p className={`mt-2 ${mutedTextClass}`}>
-                الاسم والبريد وكلمة المرور والرتبة وصلاحية الإدارة وحالة الحساب يتم حفظها وربطها مع Supabase، وتبقى متاحة مباشرة في صفحة الإحصائيات والتفرغات.
+                الاسم والبريد وكلمة المرور والرتبة وصلاحية الإدارة وحالة الحساب يتم حفظها وربطها مباشرة، وتبقى متاحة في صفحة الإحصائيات والتفرغات.
               </p>
             </div>
 

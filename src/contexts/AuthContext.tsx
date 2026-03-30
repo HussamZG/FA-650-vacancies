@@ -24,7 +24,7 @@ interface AuthContextType {
     email: string,
     password: string,
     role?: Role
-  ) => Promise<{ success: boolean; error?: string; message?: string }>;
+  ) => Promise<{ success: boolean; error?: string; message?: string; shouldGoToLogin?: boolean }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   isAuthenticated: boolean;
@@ -103,11 +103,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const message = error.message.toLowerCase();
 
         if (message.includes("email not confirmed")) {
-          return { success: false, error: "تم إنشاء الحساب لكن يجب تأكيد البريد الإلكتروني أولًا قبل تسجيل الدخول." };
+          return { success: false, error: "الحساب غير مفعّل بعد. أكمل التفعيل ثم أعد المحاولة." };
         }
 
         if (message.includes("invalid login credentials")) {
-          return { success: false, error: "بيانات الدخول غير صحيحة، أو أن الحساب لم يتم تأكيده بعد." };
+          return { success: false, error: "بيانات الدخول غير صحيحة." };
         }
 
         return { success: false, error: error.message || "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
@@ -132,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: string,
       password: string,
       role: Role = "medic"
-    ): Promise<{ success: boolean; error?: string; message?: string }> => {
+    ): Promise<{ success: boolean; error?: string; message?: string; shouldGoToLogin?: boolean }> => {
       setIsLoading(true);
 
       try {
@@ -159,7 +159,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!data.session) {
           return {
             success: true,
-            message: "تم إنشاء الحساب. تحقق من بريدك الإلكتروني لتأكيد الحساب ثم سجّل الدخول.",
+            message: "تم إنشاء الحساب بنجاح. أكمل التفعيل إن طُلب منك ذلك ثم سجّل الدخول.",
+            shouldGoToLogin: true,
           };
         }
 
