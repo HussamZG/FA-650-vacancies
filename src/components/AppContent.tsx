@@ -2452,6 +2452,7 @@ export function AppContent() {
               ...prev,
               [day.key]: allSelected ? [] : ["morning", "evening", "night"]
             }))}
+            aria-label={allSelected ? `إلغاء تحديد كل المناوبات ليوم ${day.label}` : `تحديد كل المناوبات ليوم ${day.label}`}
             className="h-8 w-8 p-0"
           >
             {allSelected ? <Check className="h-5 w-5 text-green-500" /> : <Plus className="h-5 w-5" />}
@@ -2715,6 +2716,7 @@ export function AppContent() {
             location.teamId
           )
         }
+        aria-label={`إزالة ${member.userName} من المناوبة`}
         className="h-9 w-9 rounded-xl border-none bg-red-500/10 p-0 text-red-300 hover:bg-red-500/15 hover:text-red-200"
       >
         <Trash2 className="h-4 w-4" />
@@ -3368,6 +3370,7 @@ export function AppContent() {
                   variant="ghost"
                   size="sm"
                   onClick={handleLogout}
+                  aria-label="تسجيل الخروج"
                   className="h-9 w-9 rounded-xl border-none bg-transparent p-0 text-red-400 hover:bg-red-500/10 hover:text-red-300"
                 >
                   <LogOut className="h-4 w-4" />
@@ -4069,6 +4072,7 @@ export function AppContent() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleEdit(record)}
+                                aria-label={`تعديل سجل ${record.userName}`}
                                 className="h-8 w-8 p-0"
                               >
                                 <Edit className="h-4 w-4" />
@@ -4077,6 +4081,7 @@ export function AppContent() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleDelete(record.id)}
+                                aria-label={`حذف سجل ${record.userName}`}
                                 className="h-8 w-8 p-0 text-red-500 hover:text-red-400"
                               >
                                 <Trash2 className="h-4 w-4" />

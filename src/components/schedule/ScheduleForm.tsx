@@ -40,6 +40,7 @@ const DayCard = memo(function DayCard({ day, dayShifts, onToggleShift, onSelectA
           variant="ghost"
           size="sm"
           onClick={() => onSelectAll(day.key, allSelected)}
+          aria-label={allSelected ? `إلغاء تحديد كل المناوبات ليوم ${day.label}` : `تحديد كل المناوبات ليوم ${day.label}`}
           className="h-8 w-8 p-0"
         >
           {allSelected ? <Check className="h-5 w-5 text-green-500" /> : <Plus className="h-5 w-5" />}

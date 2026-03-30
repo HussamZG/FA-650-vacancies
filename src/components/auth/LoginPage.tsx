@@ -182,6 +182,8 @@ export function LoginPage() {
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
+                        aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                        aria-pressed={showPassword}
                         className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 transition-colors hover:text-slate-200"
                       >
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -258,6 +260,8 @@ export function LoginPage() {
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
+                        aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                        aria-pressed={showPassword}
                         className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 transition-colors hover:text-slate-200"
                       >
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

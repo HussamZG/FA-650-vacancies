@@ -3,6 +3,7 @@ import { Cairo, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { getCurrentAppUser } from "@/lib/server-auth";
 
 const cairo = Cairo({
   variable: "--font-geist-sans",
@@ -40,16 +41,16 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   themeColor: "#dc2626",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const initialUser = await getCurrentAppUser().catch(() => null);
+
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
       <head>
@@ -59,7 +60,7 @@ export default function RootLayout({
       <body
         className={`${cairo.variable} ${geistMono.variable} min-h-screen overflow-x-hidden bg-background text-foreground antialiased`}
       >
-        <AuthProvider>
+        <AuthProvider initialUser={initialUser} initialAuthResolved>
           {children}
           <Toaster />
         </AuthProvider>

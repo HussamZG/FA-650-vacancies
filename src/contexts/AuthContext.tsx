@@ -32,9 +32,19 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+interface AuthProviderProps {
+  children: ReactNode;
+  initialUser?: User | null;
+  initialAuthResolved?: boolean;
+}
+
+export function AuthProvider({
+  children,
+  initialUser = null,
+  initialAuthResolved = false,
+}: AuthProviderProps) {
+  const [user, setUser] = useState<User | null>(initialUser);
+  const [isLoading, setIsLoading] = useState(!initialAuthResolved);
 
   const loadCurrentUserFromApp = useCallback(async () => {
     try {
@@ -75,19 +85,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    loadCurrentUser();
+    if (!initialAuthResolved) {
+      void loadCurrentUser();
+    }
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(() => {
-      loadCurrentUser();
+      void loadCurrentUser();
     });
 
     return () => {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [loadCurrentUserFromApp]);
+  }, [initialAuthResolved, loadCurrentUserFromApp]);
 
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
