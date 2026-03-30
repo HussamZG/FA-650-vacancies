@@ -1,29 +1,30 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { AppContent } from "@/components/AppContent";
+import { LoadingScreen } from "@/components/LoadingScreen";
 
 export default function HomePage() {
   const { user, isLoading } = useAuth();
+  const [hasMetMinimumDelay, setHasMetMinimumDelay] = useState(false);
 
-  // Show loading state
-  if (isLoading) {
-    return (
-      <div className="app-stage relative flex min-h-screen items-center justify-center overflow-hidden px-4">
-        <div className="glass-panel flex flex-col items-center gap-4 rounded-[2rem] px-10 py-9">
-          <div className="h-16 w-16 animate-spin rounded-full border-4 border-white/10 border-t-[#ff5f6d]" />
-          <p className="text-sm text-slate-300">جاري التحميل...</p>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setHasMetMinimumDelay(true);
+    }, 3500);
 
-  // Show login page if not authenticated
-  if (!user) {
-    return <LoginPage />;
-  }
+    return () => window.clearTimeout(timer);
+  }, []);
 
-  // Show main app content if authenticated
-  return <AppContent />;
+  const shouldShowLoadingScreen = isLoading || !hasMetMinimumDelay;
+  const pageContent = !isLoading ? (user ? <AppContent /> : <LoginPage />) : null;
+
+  return (
+    <>
+      {pageContent}
+      <LoadingScreen isVisible={shouldShowLoadingScreen} />
+    </>
+  );
 }
